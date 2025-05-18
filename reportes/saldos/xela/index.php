@@ -3,7 +3,7 @@ session_start(); // Inicia sesión
 
 // Verifica si el usuario está autenticado
 if (!isset($_SESSION['usuario'])) {
-    header('Location: ../../login/login.php'); // Redirige al login si no está autenticado
+    header('Location: ../../../login/login.php'); // Redirige al login si no está autenticado
     exit;
 }
 ?>
@@ -21,11 +21,12 @@ s.fecha_vencimiento,
 if (datediff(now(), s.fecha_vencimiento) < 0,0,datediff(now(), s.fecha_vencimiento)) as dias_vencidos 
 from adm_venta v 
 join saldoxcobrar s on v.idventa = s.idventa 
-join db_rmym.clientes c on v.id_cliente = c.idcliente 
-join db_rmym.adm_empleado e on c.id_empleado = e.id_empleado
-join db_rmym.adm_departamentopais dp on c.iddepartamento = dp.iddepartamento
-join db_rmym.adm_municipio m on c.id_municipio = m.id_municipio
-where s.estado = 1 
+join db_rmymxela.clientes c on v.id_cliente = c.idcliente 
+join db_rmymxela.adm_empleado e on c.id_empleado = e.id_empleado
+join db_rmymxela.adm_departamentopais dp on c.iddepartamento = dp.iddepartamento
+join db_rmymxela.adm_municipio m on c.id_municipio = m.id_municipio
+where c.iddepartamento in(13,15,19,21)
+and s.estado = 1 
 and v.estado > 0 
 and s.saldo > 0 
 and v.tipo in('E', 'F') 
@@ -35,12 +36,13 @@ order by departamento,municipio;";
 // Función para obtener los datos
 function obtenerDatosDeBaseDeDatos($consulta)
 {
-    $servidor = 'localhost';
-    $usuario = 'root';
-    $contrasena = 'MyG4b0QL2023**@##';
+    $servidor = '181.114.25.86';
+    $usuario = 'usr_mym';
+    $contrasena = 'Mym*20#*81@_)';
+    $port = 3307;
     $baseDeDatos = 'db_mymsa';
 
-    $conexion = new mysqli($servidor, $usuario, $contrasena, $baseDeDatos);
+    $conexion = new mysqli($servidor, $usuario, $contrasena, $baseDeDatos,$port);
 
     if ($conexion->connect_error) {
         die("Error de conexión: " . $conexion->connect_error);
@@ -65,12 +67,13 @@ $resultado = obtenerDatosDeBaseDeDatos($consulta);
 <?php
 // Obtener opciones únicas para filtros
 function obtenerOpcionesFiltro($campo, $tabla) {
-    $servidor = 'localhost';
-    $usuario = 'root';
-    $contrasena = 'MyG4b0QL2023**@##';
+    $servidor = '181.114.25.86';
+    $usuario = 'usr_mym';
+    $contrasena = 'Mym*20#*81@_)';
+    $port = 3307;
     $baseDeDatos = 'db_mymsa';
 
-    $conexion = new mysqli($servidor, $usuario, $contrasena, $baseDeDatos);
+    $conexion = new mysqli($servidor, $usuario, $contrasena, $baseDeDatos,$port);
 
     if ($conexion->connect_error) {
         die("Error de conexión: " . $conexion->connect_error);
@@ -91,9 +94,9 @@ function obtenerOpcionesFiltro($campo, $tabla) {
 }
 
 // Obtener opciones para cada filtro
-$departamentos = obtenerOpcionesFiltro('nombre', 'db_rmym.adm_departamentopais');
-$municipios = obtenerOpcionesFiltro('nombre', 'db_rmym.adm_municipio');
-$vendedores = obtenerOpcionesFiltro('nombre', 'db_rmym.adm_empleado');
+$departamentos = obtenerOpcionesFiltro('nombre', 'adm_departamentopais');
+$municipios = obtenerOpcionesFiltro('nombre', 'adm_municipio');
+$vendedores = obtenerOpcionesFiltro('nombre', 'adm_empleado');
 ?>
 <!-- PARA LA GRÁFICA -->
 <?php
@@ -130,54 +133,68 @@ $totals = [
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,700;0,900;1,100;1,300;1,400;1,500;1,700;1,900&display=swap" rel="stylesheet">
     <!-- Menu sidebar -->
-    <link rel="stylesheet" href="../../css/menuPrincipal.css">
+    <link rel="stylesheet" href="../../../css/menuPrincipal.css">
     <!-- Tabla de data table -->
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
     <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.1/css/buttons.dataTables.min.css">
-    <link rel="stylesheet" href="../../css/datatables.css" />
-    <link rel="stylesheet" href="../../css/datatables.min.css" />
+    <link rel="stylesheet" href="../../../css/datatables.css" />
+    <link rel="stylesheet" href="../../../css/datatables.min.css" />
     <link rel="stylesheet" href="css/estilos.css">
     <title>Reporte</title>
 </head>
 <body>
 <!-- ---------- -->
 <nav id="sidebar">
-    <ul>
-      <li>
-        <span class="logo">Distruidora MYM</span>
-        <button onclick=toggleSidebar() id="toggle-btn">
+  <ul>
+    <li>
+      <span class="logo">Distruidora MYM</span>
+      <button onclick=toggleSidebar() id="toggle-btn">
         <i class='bx bx-chevrons-left' ></i>
-        </button>
-      </li>
-      <li class="active">
-        <a href="../../index.php">
+      </button>
+    </li>
+    <li class="active">
+      <a href="index.php">
         <i class='bx bx-home'></i>
-          <span>Inicio</span>
-        </a>
-      </li>
-      <li>
-        <button onclick=toggleSubMenu(this) class="dropdown-btn">
+        <span>Inicio</span>
+      </a>
+    </li>
+    <li>
+      <button onclick=toggleSubMenu(this) class="dropdown-btn">
         <i class='bx bxs-report'></i>
-          <span class="texto_menu">Reporte</span>
-          <i class='bx bx-chevron-down'></i>
-        </button>
-        <ul class="sub-menu">
-          <div>
-            <li><a href="#">Saldos</a></li>
-            <li><a href="../recibos">Recibos</a></li>
-            <li><a href="../cobrosVentas">Resumen CV</a></li>
-          </div>
-        </ul>
-      </li>
-    
-      <li class="log_out">
-        <a href="../../login/logout.php">
+        <span class="texto_menu">Reporte</span>
+        <i class='bx bx-chevron-down'></i>
+      </button>
+
+      <ul class="sub-menu">
+        <div>
+          <li>
+            <button onclick=toggleSubMenu2(this) class="dropdown-btn">
+              <span class="texto_menu">Saldos</span>
+              <i class='bx bx-chevron-down'></i>
+            </button>
+            <ul class="sub-menu2">
+              <div>
+                <li><a href="../central">Central</a></li>
+                <li><a href="../peten">Peten</a></li>
+                <li><a href="#">Xela</a></li>
+              </div>
+            </ul>
+          </li>
+          <li><a href="../../recibos">Recibos</a></li>
+          <li><a href="../../cobrosVentas">Resumen CV</a></li>
+          <li><a href="../../productoClientes">Producto Clientes</a></li>
+        </div>
+      </ul>
+    </li>
+
+    <li class="log_out">
+      <a href="../../../login/logout.php">
         <i class='bx bx-log-out'></i>
-          <span>Cerrar Sesión</span>
-        </a>
-      </li>
-    </ul>
-  </nav>
+        <span>Cerrar Sesión</span>
+      </a>
+    </li>
+  </ul>
+</nav>
   <main id="contenedorContenido">
   <div class="contenedor_titulo">
         <h2>SALDOS</h2>
@@ -185,12 +202,13 @@ $totals = [
 
     <div class="contenedor_tabla">
 
-    <div class="filtros">
+<div class="filtros">
     <select id="filtro-departamento" class="selectores">
         <option value="">Todos los Departamentos</option>
-        <?php foreach ($departamentos as $departamento): ?>
-            <option value="<?php echo $departamento; ?>"><?php echo $departamento; ?></option>
-        <?php endforeach; ?>
+            <option value="QUETZALTENANGO">QUETZALTENANGO</option>
+            <option value="RETALHULEU">RETALHULEU</option>
+            <option value="SOLOLA">SOLOLA</option>
+            <option value="TOTONICAPAN">TOTONICAPAN</option>
     </select>
 
     <select id="filtro-municipio" class="selectores">
@@ -244,7 +262,7 @@ $totals = [
     </div>
     </div>
   </main>
-    <script src="../../js/sidebar.js"></script>
+    <script src="../../../js/sidebar.js"></script>
 
 <!-- -------- -->
 <!-- Gráfica -->
@@ -417,9 +435,9 @@ $totals = [
     </script>
 
 <!-- Data Table -->
-<script src="../../js/jquery-3.7.1.js"></script>
-<script src="../../js/datatables.js"></script>
-<script src="../../js/datatables.min.js"></script>
+<script src="../../../js/jquery-3.7.1.js"></script>
+<script src="../../../js/datatables.js"></script>
+<script src="../../../js/datatables.min.js"></script>
 <!-- JSZip para exportar a Excel -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.1.3/jszip.min.js"></script>
 <!-- pdfmake para exportar a PDF -->

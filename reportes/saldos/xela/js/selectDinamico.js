@@ -1,27 +1,25 @@
 $(document).ready(function () {
     $('#filtro-departamento').on('change', function () {
         const departamento = $(this).val();
-
         if (departamento) {
             // Mostrar "Cargando municipios..." mientras se obtienen municipios
             $('#filtro-municipio').html('<option value="">Cargando municipios...</option>');
-
             // Hacer la solicitud AJAX para cargar municipios
             $.ajax({
-                url: '../obtener_municipios.php',
+                url: '../xela/data/obtener_municipios.php',
                 method: 'POST',
-                data: { departamento },
+                data: {departamento},
                 success: function (data) {
                     $('#filtro-municipio').html(data); // Llenar el selector de municipios
                 },
-                error: function () {
+                error: function (err) {
+                    console.log(err);
                     alert('Error al cargar los municipios.');
                 }
             });
 
             // Filtrar la tabla por el departamento seleccionado
-            const datosFiltrados = datos.filter(fila => fila.departamento === departamento);
-            console.log(datos);
+            const datosFiltrados = data.filter(fila => fila.departamento === departamento);
             actualizarTabla(datosFiltrados);
         } else {
             // Si se selecciona "Todos los Departamentos"

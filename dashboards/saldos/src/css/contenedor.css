@@ -1,0 +1,79 @@
+.contenedor_principal{
+    width: 85vw;
+    height: 92vh;
+    position: fixed;
+    top: 8vh;
+    left: 15vw;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 0 !important;
+}
+.contenedor_dashboard{
+    background-color: #4244648e;
+    width: 98%;
+    height: 96%;
+    padding: 20px;
+    border-radius: 10px;
+    position: relative;
+}
+.titulo_dashboard{
+    color: #fff;
+    font-size: 18px;
+    font-weight: 500;
+}
+.ctnd_filtros{
+    width: 20%;
+    height: 85%;
+    position: absolute;
+    left: 1%;
+    bottom: 30px;
+}
+.cuadro{
+    width: 76%;
+    height: 85%;
+    position: absolute;
+    right: 1%;
+    bottom: 30px;
+    display: flex;
+    justify-content: space-between;
+  flex-wrap: wrap; /* Permite que los elementos "salten" a nuevas filas */
+  gap: 10px; /* Espaciado entre elementos (opcional) */
+}
+
+@media(max-width: 1120px){
+    .contenedor_principal{
+        width: 98vw;
+        height: 84vh;
+        left: 1vw;
+    }
+    .contenedor_dashboard{
+        max-height: 96%;
+        overflow: scroll;
+    }
+}
+
+@media(max-width: 830px){
+    .contenedor_dashboard{
+        max-height: 96%;
+        overflow: scroll;
+        display: flex;
+        flex-direction: column;
+    }
+    .ctnd_filtros{
+        width: 98%;
+        height: auto;
+        position: unset;
+        margin: auto;
+        margin-top: 20px;
+    }
+    .cuadro{
+        width: 98%;
+        margin: auto;
+        position: unset;
+        flex-wrap: nowrap; 
+        gap: 0;        
+        flex-direction: column;
+        justify-content: unset;
+    }
+}

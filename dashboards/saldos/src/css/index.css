@@ -1,0 +1,12 @@
+*{
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  outline: none;
+  font-family: "Roboto";
+  -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+}
+body{
+  background: rgb(41,75,119);
+  background: linear-gradient(288deg, rgba(41,75,119,1) 4%, rgba(42,44,83,1) 22%, rgba(42,46,86,1) 56%, rgba(41,71,115,1) 78%);
+}

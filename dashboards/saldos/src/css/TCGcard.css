@@ -1,0 +1,30 @@
+.tcg_contenedor_tabla{
+    width: 50%;
+    height: 90%;
+    margin-top: 10px;
+    float: left;
+    display: flex;
+    justify-content: center;
+}
+
+
+.tcg_contenedor_grafica{
+    width: 50%;
+    height: 90%;
+    margin-top: 10px;
+    float: left;
+    display: flex;
+    justify-content: center;
+    align-items: start;
+}
+
+@media(max-width: 600px){
+    .tcg_contenedor_tabla{
+        width: 100%;
+        height: 50%;
+    }
+    .tcg_contenedor_grafica{
+        width: 100%;
+        height: 250px;
+    }
+}

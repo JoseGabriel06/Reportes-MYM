@@ -1,0 +1,175 @@
+:root{
+    --pincipal-color: #011c40;
+    --hover-clr: #024bac;
+    --secundario-color: #BF364F;
+    --negro: #0D0D0D;
+    --blanco-visible: #F2F2F2;
+  }
+*{
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      outline: none !important;
+      font-family: "Roboto";
+      -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+  }
+
+
+.contenedor_titulo{
+    background-color: var(--pincipal-color);
+    width: 100%;
+    height: 40px;
+    padding-left: 20px;
+    position: fixed;
+    display: flex;
+    align-items: center;
+    z-index: 1000;
+}
+.contenedor_titulo h2{
+    color: var(--blanco-visible);
+    font-size: 20px;
+    font-weight: 500;
+    text-align: center;
+}
+
+.contenedor_grafica{
+    width: 90%;
+    height: 400px;
+    margin: auto;
+    margin-top: 20px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    position: relative;
+}
+
+.grafica{
+    width: 100%;
+    height: 350px;
+    margin-top: 10px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.contenedor_tabla{
+    max-width: 90%;
+    margin: auto;
+    margin-top: 60px;
+}
+.filtros{
+    width: 100%;
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+}
+
+/* Botón específico PDF */
+.buttons-pdf {
+    background-color: #e74c3c !important; /* Rojo */
+    color: white !important;
+    transition: .3s;
+}
+
+.buttons-pdf:hover {
+    background-color: #c0392b !important; /* Rojo más oscuro */
+}
+
+/* Botón específico Excel */
+.buttons-excel {
+    background-color: #28a745 !important;  /* Verde */
+    color: white !important;
+    transition: .3s;
+}
+
+.buttons-excel:hover {
+    background-color: #218838 !important; /* Verde más oscuro */
+}
+
+.selectores{
+    background-color: var(--pincipal-color);
+    color: white;
+    padding-left: 10px;
+    padding-right: 10px;
+    width: 25%;
+    height: 40px;
+}
+.exp_pdf{
+    background-color: #e74c3c;
+    color: var(--blanco-visible);
+    text-align: center;
+    width: 60px;
+    height: 40px;
+    position: absolute;
+    top: 0;
+    left: 0;
+    cursor: pointer;
+    border: 1px solid rgba(0, 0, 0, 0.3);
+    border-radius: 2px;
+    transition: .3s;
+}
+.exp_pdf:hover{
+    background-color: #c0392b;
+}
+
+/* Seleccionar celdas por su encabezado */
+th:nth-child(3), td:nth-child(3){
+    width: 250px;
+    min-width: 250px;
+    max-width: 250px;
+}
+
+th:nth-child(7), td:nth-child(7), /* Monto */
+th:nth-child(8), td:nth-child(8), /* Abono */
+th:nth-child(9), td:nth-child(9),  /* Saldo */
+th:nth-child(10), td:nth-child(10),  /* Fecha envío */
+th:nth-child(11), td:nth-child(11)  /* Fecha vencimiento */
+{
+    width: 180px;
+    min-width: 180px;
+    max-width: 180px;
+}
+
+
+.dt-search{
+    width: 50%;
+    position: absolute;
+    right: 0;
+    display: flex;
+    justify-content: right;
+}
+
+
+@media(max-width: 1110px){
+  .filtros{
+    flex-direction: column;
+  }
+  .selectores{
+    width: 100%;
+    margin-top: 10px;
+  }
+  .dt-buttons{
+    display: flex;
+    justify-content: space-between;
+  }
+  .dt-button{
+    width: 40%;
+  }
+}
+
+@media(max-width: 800px){
+    .exp_pdf{
+        width: 100%;
+    }
+}
+@media (max-width: 642px) {
+    .dt-search{
+        width: 100%;
+        margin-top: 20px;
+        position: relative;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+}

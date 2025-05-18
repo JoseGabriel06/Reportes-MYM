@@ -1,20 +1,21 @@
 <?php
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $departamento = $_POST['departamentossdadsfasdf'];
+    $departamento = $_POST['departamento'];
 
-    $servidor = 'localhostsdsdf';
-    $usuario = 'root';
-    $contrasena = 'MyG4b0QL2023**@##';
-    $baseDeDatos = 'db_mymsa';
+    $servidor = '181.114.25.86';
+    $usuario = 'usr_mym';
+    $contrasena = 'Mym*20#*81@_)';
+    $port = 3307;
+    $baseDeDatos = 'db_mymsaxela';
 
-    $conexion = new mysqli($servidor, $usuario, $contrasena, $baseDeDatos);
+    $conexion = new mysqli($servidor, $usuario, $contrasena, $baseDeDatos,$port);
 
     if ($conexion->connect_error) {
         die("Error de conexión: " . $conexion->connect_error);
     }
 
     // Consulta para obtener municipios por departamento
-    $stmt = $conexion->prepare("SELECT nombre FROM db_rmym.adm_municipio WHERE id_departamento = (SELECT iddepartamento FROM db_rmym.adm_departamentopais WHERE nombre = ?)");
+    $stmt = $conexion->prepare("SELECT nombre FROM db_mymsaxela.adm_municipio WHERE id_departamento = (SELECT iddepartamento FROM db_mymsaxela.adm_departamentopais WHERE nombre = ?)");
     $stmt->bind_param('s', $departamento);
     $stmt->execute();
     $result = $stmt->get_result();

@@ -1,0 +1,23 @@
+.navbar{
+    background-color: var(--pincipal-color);
+    width: 100%;
+    height: 8vh;
+    padding-left: 20px;
+    position: fixed;
+    display: flex;
+    align-items: center;
+    z-index: 200;
+}
+.linea{
+    height: 50%;
+    width: 2px;
+    border-width:0;
+    color:#3d86c0;
+    background-color:#3d86c0;
+}
+.titulo{
+    color: #3d86c0;
+    font-weight: 400;
+    font-size: 15px;
+    margin-left: 5px;
+}

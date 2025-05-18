@@ -22,43 +22,56 @@ if (!isset($_SESSION['usuario'])) {
 </head>
 <body>
 <nav id="sidebar">
-    <ul>
-      <li>
-        <span class="logo">Distruidora MYM</span>
-        <button onclick=toggleSidebar() id="toggle-btn">
+  <ul>
+    <li>
+      <span class="logo">Distruidora MYM</span>
+      <button onclick=toggleSidebar() id="toggle-btn">
         <i class='bx bx-chevrons-left' ></i>
-        </button>
-      </li>
-      <li class="active">
-        <a href="index.php">
+      </button>
+    </li>
+    <li class="active">
+      <a href="index.php">
         <i class='bx bx-home'></i>
-          <span>Inicio</span>
-        </a>
-      </li>
-      <li>
-        <button onclick=toggleSubMenu(this) class="dropdown-btn">
+        <span>Inicio</span>
+      </a>
+    </li>
+    <li>
+      <button onclick=toggleSubMenu(this) class="dropdown-btn">
         <i class='bx bxs-report'></i>
-          <span class="texto_menu">Reporte</span>
-          <i class='bx bx-chevron-down'></i>
-        </button>
-        <ul class="sub-menu">
-          <div>
-            <li><a href="reportes/ventas">Saldos</a></li>
-            <li><a href="reportes/recibos">Recibos</a></li>
-            <li><a href="reportes/cobrosVentas">Resumen CV</a></li>
-          </div>
-            
-        </ul>
-      </li>
-    
-      <li class="log_out">
-        <a href="login/logout.php">
+        <span class="texto_menu">Reporte</span>
+        <i class='bx bx-chevron-down'></i>
+      </button>
+
+      <ul class="sub-menu">
+        <div>
+          <li>
+            <button onclick=toggleSubMenu2(this) class="dropdown-btn">
+              <span class="texto_menu">Saldos</span>
+              <i class='bx bx-chevron-down'></i>
+            </button>
+            <ul class="sub-menu2">
+              <div>
+                <li><a href="reportes/saldos/central">Central</a></li>
+                <li><a href="reportes/saldos/peten">Peten</a></li>
+                <li><a href="reportes/saldos/xela">Xela</a></li>
+              </div>
+            </ul>
+          </li>
+          <li><a href="reportes/recibos">Recibos</a></li>
+          <li><a href="reportes/cobrosVentas">Resumen CV</a></li>
+          <li><a href="reportes/productoClientes">Producto Clientes</a></li>
+        </div>
+      </ul>
+    </li>
+
+    <li class="log_out">
+      <a href="login/logout.php">
         <i class='bx bx-log-out'></i>
-          <span>Cerrar Sesión</span>
-        </a>
-      </li>
-    </ul>
-  </nav>
+        <span>Cerrar Sesión</span>
+      </a>
+    </li>
+  </ul>
+</nav>
   <main>
     <div class="imagen_fondo">
     </div>

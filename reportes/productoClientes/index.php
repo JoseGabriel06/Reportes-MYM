@@ -30,7 +30,7 @@ if (!isset($_SESSION['usuario'])) {
     <link rel="stylesheet" href="css/estilos.css">
     <title>Reporte</title>
 </head>
-<body onload="cargarFechas()">
+<body>
 <nav id="sidebar">
   <ul>
     <li>
@@ -68,8 +68,8 @@ if (!isset($_SESSION['usuario'])) {
             </ul>
           </li>
           <li><a href="../recibos">Recibos</a></li>
-          <li><a href="#">Resumen CV</a></li>
-          <li><a href="../productoClientes">Producto Clientes</a></li>
+          <li><a href="../cobrosVentas">Resumen CV</a></li>
+          <li><a href="#">Producto Clientes</a></li>
         </div>
       </ul>
     </li>
@@ -84,49 +84,43 @@ if (!isset($_SESSION['usuario'])) {
 </nav>
   <main id="contenedorContenido">
   <div class="contenedor_titulo">
-        <h2>RESUMEN COBROS Y VENTAS</h2>
+        <h2>PRODUCTOS POR CLIENTE</h2>
     </div>
 
     <div class="contenedor_tabla">
-    <div class="fechas">
-        <div class="fecha">
-            <label for="fecha_inicio" class="subtitulo_fecha">Fecha Inicio</label>
-            <input type="date" id="fecha_inicio" name="fecha_inicio" class="campo_fecha">
-        </div>
-        <div class="fecha">
-            <label for="fecha_final" class="subtitulo_fecha">Fecha Final</label>
-            <input type="date" id="fecha_final" name="fecha_final" class="campo_fecha">
-        </div>
+    <div class="contenedor_codigo">
+      <label for="codigo" class="codigo_producto_titulo">Código Producto</label>
+      <input type="text" id="codigo" name="codigo" placeholder="Código..." class="codigo_producto"/>
     </div>
-    <div class="contenedor_btn">
+      <div class="contenedor_btn">
     <button type="button" id="btnCarga" onclick="CargarListaRecibos()" class="btn_cargar">APLICAR FILTROS</button>
     </div>
- 
-
 
             <table id="tabla-ventas" class="display" style=" z-index: 1;">
         <thead>
             <tr>
-                <th>Vendedor</th>
-                <th>Semana</th>
-                <th>Cobro Total</th>
-                <th>Venta Total</th>
+                <th>Departamento</th>
+                <th>Municipio</th>
+                <th>Cliente</th>
+                <th>Cantidad</th>
+                <th>Precio</th>
+                <th>Subtotal</th>
+                <th>Última Compra</th>
+                <th>Cantidad Devuelta</th>
+                <th>Precio Unitario Venta</th>
+                <th>Subtotal Devolución</th>
+                <th>Sobre</th>
+                <th>Marca</th>
             </tr>
         </thead>
         <tbody id="cuerpoTabla">
             <!-- Se llenará dinámicamente con JavaScript -->
         </tbody>
-        <tfoot>
-        <tr>
-            <th colspan="2">Totales:</th>
-            <th id="total-cobro"></th>
-            <th id="total-venta"></th>
-        </tr>
-    </tfoot>
     </table>
     </div>
   </main>
     <script src="../../js/sidebar.js"></script>
+<!-- -------- -->
 
 <!-- Data Table -->
 <script src="../../js/jquery-3.7.1.js"></script>
@@ -160,73 +154,49 @@ if (!isset($_SESSION['usuario'])) {
             {
                 extend: 'excelHtml5',
                 text: 'Exportar a Excel',
-                title: 'RESUMEN COBROS Y VENTAS',
+                title: 'Ventas de Producto',
                 exportOptions: {
                     columns: ':visible'
-                },
-                customizeData: function (data) {
-                    // Agregar totales al exportar
-                    const totalCobro = table.column(2, { filter: 'applied' }).data().reduce((a, b) => parseFloat(a) + parseFloat(b), 0);
-                    const totalVenta = table.column(3, { filter: 'applied' }).data().reduce((a, b) => parseFloat(a) + parseFloat(b), 0);
-
-                    const totalRow = ['', 'Totales:', totalCobro.toFixed(2), totalVenta.toFixed(2)];
-                    data.body.push(totalRow);
                 }
             }
-        ],
-    columnDefs: [
-        {
-            // Formatea la columna "Total Cobro" (índice 2)
-            targets: 2,
-            render: function (data, type, row) {
-                if (type === 'display' || type === 'filter') {
-                    return new Intl.NumberFormat('es-GT', { style: 'currency', currency: 'GTQ' }).format(data);
-                }
-                return data; // Devuelve el número original para cálculos
-            }
-        },
-        {
-            // Formatea la columna "Total Venta" (índice 3)
-            targets: 3,
-            render: function (data, type, row) {
-                if (type === 'display' || type === 'filter') {
-                    return new Intl.NumberFormat('es-GT', { style: 'currency', currency: 'GTQ' }).format(data);
-                }
-                return data; // Devuelve el número original para cálculos
-            }
-        }
-    ]
+        ]
     });
 
     function CargarListaRecibos(){
-    let campoFechaInicio = document.getElementById("fecha_inicio").value;
-    let campoFechaFinal = document.getElementById("fecha_final").value;
+    let codigoProducto = document.getElementById("codigo").value;
 
    // let datos;
     $.ajax({
-    url: "cv.data.php",
+    url: "productoCliente.data.php",
     dataType: 'json',
     type: "post",
     data: {
-      'fechaInicio': campoFechaInicio,
-      'fechaFinal': campoFechaFinal
+      'codigo': codigoProducto
     },
     success: function (object) {               
-        //const datos = object;
+       //const datos = object;
         // const datos = JSON.stringify(object);             
         // datosInput.value = object;  
         table.clear();
         
         object.forEach(fila => {
             table.row.add([
-                fila.nombre_vendedor,
-                fila.semana,
-                parseFloat(fila.total_cobro).toFixed(2),
-                parseFloat(fila.total_venta).toFixed(2)
-            ]);             
-    });        
+                fila.departamento,
+                fila.municipio,
+                fila.cliente,
+                fila.cantidad,
+                parseFloat(fila.precio).toFixed(2),
+                parseFloat(fila.subtotal).toFixed(2),
+                fila.ultima_compra,
+                fila.cantidad_devuelta,
+                parseFloat(fila.precio_unitario_venta).toFixed(2),
+                parseFloat(fila.subtotal_devolucion).toFixed(2),
+                fila.sobre,
+                fila.marca
+            ]);            
+    });    
      // Dibuja la tabla nuevamente con los datos actualizados
-     table.draw();      
+     table.draw();            
     },
     error: function (jqXHR, textStatus, errorThrown) {
       console.log("Status: " + textStatus);
@@ -237,46 +207,7 @@ if (!isset($_SESSION['usuario'])) {
 // Ajustar las columnas después de inicializar
 table.columns.adjust();
     }
-    // Función para calcular y actualizar los totales
-function calcularTotales() {
-    // Calcula los totales
-    const totalCobro = table.column(2, { filter: 'applied' }).data().reduce((a, b) => parseFloat(a) + parseFloat(b), 0);
-    const totalVenta = table.column(3, { filter: 'applied' }).data().reduce((a, b) => parseFloat(a) + parseFloat(b), 0);
 
-      // Aplica formato de moneda quetzal
-      const formatoMoneda = new Intl.NumberFormat('es-GT', { style: 'currency', currency: 'GTQ' });
-
-      // Actualiza el footer con los totales formateados
-      $('#total-cobro').html(formatoMoneda.format(totalCobro));
-      $('#total-venta').html(formatoMoneda.format(totalVenta));
-  }
-
-
-  // Ajusta columnas cuando se redibuje la tabla
-  table.on('draw', function () {
-      calcularTotales();
-  });
     </script>
-
-    <script>
-function cargarFechas(){
-  var fecha = new Date(); //Fecha actual
-  var mes = fecha.getMonth()+1; //obteniendo mes
-  var dia = fecha.getDate(); //obteniendo dia
-  var ano = fecha.getFullYear(); //obteniendo año
-  if(dia<10)
-    dia='0'+dia; //agrega cero si el menor de 10
-  if(mes<10)
-    mes='0'+mes //agrega cero si el menor de 10
-  document.getElementById('fecha_inicio').value=ano+"-"+mes+"-"+dia;
-  document.getElementById('fecha_final').value=ano+"-"+mes+"-"+dia;
-}
-    </script>
-
-  <!-- Creación de Grafica -->
-   <!-- Chart.js -->
-<!-- <script src="https://cdn.jsdelivr.net/npm/chart.js"></script> -->
-
-
 </body>
 </html>
