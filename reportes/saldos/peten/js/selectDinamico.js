@@ -10,6 +10,7 @@ $(document).ready(function () {
                 method: 'POST',
                 data: {departamento},
                 success: function (data) {
+                    console.log(data);
                     $('#filtro-municipio').html(data); // Llenar el selector de municipios
                 },
                 error: function (err) {

@@ -1,12 +1,12 @@
 <?php
 session_start();
-$config = include "config.php";
+$config = require "config.php";
 
 $host = $config->host;
 $port = $config->port;
-$database = '';
-$username = '';
-$password = '';
+$database = $config->database;
+$username = $config->username;
+$password = $config->pass;
 
 /**
  * Si existe la variable sucursal, se verifica el valor
@@ -40,9 +40,9 @@ $password = '';
 //         $password = $config->pass;
 //     }
 // } else {
-    $database = $config->database;
-    $username = $config->username;
-    $password = $config->pass;
+    // $database = $config->database;
+    // $username = $config->username;
+    // $password = $config->pass;
 // }
 
  /**

@@ -1,15 +1,16 @@
 <?php
-require_once('../../connection.php');
+require_once __DIR__ . '/../../includes/db_connect.php';
+$conexion = connectToDatabase('central');
 // Obtener opciones únicas para filtros
 $campo = $_POST["campo"];
 $tabla = $_POST["tabla"];
 
-    if ($mysqli->connect_error) {
-        die("Error de conexión: " . $mysqli->connect_error);
+    if ($conexion->connect_error) {
+        die("Error de conexión: " . $conexion->connect_error);
     }
 
     $consulta = "SELECT DISTINCT $campo FROM $tabla ORDER BY $campo";
-    $resultado = $mysqli->query($consulta);
+    $resultado = $conexion->query($consulta);
 
     $opciones = [];
     if ($resultado) {
@@ -18,6 +19,6 @@ $tabla = $_POST["tabla"];
         }
     }
 
-    $mysqli->close();
+    $conexion->close();
     echo json_encode($opciones);
     ?>

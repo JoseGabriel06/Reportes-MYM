@@ -39,7 +39,8 @@ if (isset($_SESSION['usuario'])) {
     exit;
 }
 
-require_once '../connection.php';
+require_once __DIR__ . '/../includes/db_connect.php';
+$conexion = connectToDatabase('central');
 // Verifica si el formulario fue enviado
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // $servername = "localhost"; 
@@ -47,7 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // $password = "MyG4b0QL2023**@##"; 
     // $database = "db_mymsa"; 
 
-    if ($mysqli !== null && $mysqli->connect_errno === 0) {
+    if ($conexion !== null && $conexion->connect_errno === 0) {
     // if ($mys->connect_error) {
     //     echo "<script>alertify.error('Error al conectar con la base de datos');</script>";
     //     exit;
@@ -58,7 +59,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $sql = "SELECT * FROM adm_usuario 
             WHERE usuario = ? AND AES_DECRYPT(clave, '$0fTM1M') = ?";
-    $stmt = $mysqli->prepare($sql);
+    $stmt = $conexion->prepare($sql);
 
     if (!$stmt) {
         echo "<script>alertify.error('Error en la consulta SQL');</script>";
@@ -83,7 +84,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     $stmt->close();
-    $mysqli->close();
+    $conexion->close();
 }else{
     echo "<script>alertify.error('Error al conectar con la base de datos');</script>";
     exit;

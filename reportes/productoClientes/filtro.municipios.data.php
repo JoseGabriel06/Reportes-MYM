@@ -1,14 +1,15 @@
 <?php
-require_once('../../connection.php');
+require_once __DIR__ . '/../../includes/db_connect.php';
+$conexion = connectToDatabase('central');
 
     $departamento = $_POST['departamento'];
 
-    if ($mysqli->connect_error) {
-        die("Error de conexión: " . $mysqli->connect_error);
+    if ($conexion->connect_error) {
+        die("Error de conexión: " . $conexion->connect_error);
     }
 
     // Consulta para obtener municipios por departamento
-    $stmt = $mysqli->prepare("SELECT nombre FROM db_rmym.adm_municipio WHERE id_departamento = (SELECT iddepartamento FROM db_rmym.adm_departamentopais WHERE nombre = ?)");
+    $stmt = $conexion->prepare("SELECT nombre FROM db_rmym.adm_municipio WHERE id_departamento = (SELECT iddepartamento FROM db_rmym.adm_departamentopais WHERE nombre = ?)");
     $stmt->bind_param('s', $departamento);
     $stmt->execute();
     $resultado = $stmt->get_result();
@@ -21,6 +22,6 @@ require_once('../../connection.php');
 
 
 
-$mysqli->close();
+$conexion->close();
     echo json_encode($opciones);
 ?>

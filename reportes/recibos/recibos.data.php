@@ -1,11 +1,12 @@
 <?php
-require_once '../../connection.php';
+require_once __DIR__ . '/../../includes/db_connect.php';
+$conexion = connectToDatabase('central');
 // Consulta SQL
-$fechaInicio = $_POST["fechaInicio"];
-$fechaFinal = $_POST["fechaFinal"];
+$fechaInicio  = $_POST["fechaInicio"];
+$fechaFinal   = $_POST["fechaFinal"];
 $departamento = $_POST["departamento"];
-$municipio = $_POST["municipio"];
-$vendedor = $_POST["vendedor"];
+$municipio    = $_POST["municipio"];
+$vendedor     = $_POST["vendedor"];
 
 $filtro = "";
 // Consulta SQL
@@ -38,62 +39,58 @@ d.cobrado,
 r.nombre_cliente,
 dp.nombre as departamento,
 m.nombre as municipio
-from db_rmym.vnt_registro_recibo r 
+from db_rmym.vnt_registro_recibo r
 join db_rmym.vnt_detalle_recibo d on r.id_recibo = d.id_recibo
 join db_rmym.clientes cl on r.id_cliente = cl.idcliente
 join db_rmym.adm_departamentopais dp on cl.iddepartamento = dp.iddepartamento
 join db_rmym.adm_municipio m on cl.id_municipio = m.id_municipio
 join db_rmym.adm_usuario u on r.id_usuario = u.idadm_usuario
-join db_rmym.adm_empleado e on u.id_empleado = e.id_empleado 
-left join db_mymsa.adm_recibo ro on r.id_recibo = ro.idreciboventa and ro.estado = 1
-where 
+join db_rmym.adm_empleado e on u.id_empleado = e.id_empleado
+left join adm_recibo ro on r.id_recibo = ro.idreciboventa and ro.estado = 1
+where
 date(r.fecha_recibo) >= ? and date(r.fecha_recibo) <= ?
 and r.estado > 0 ";
 
-if($departamento != "TODOS")
-{
+if ($departamento != "TODOS") {
     $filtro = "and dp.nombre = '$departamento' ";
 }
 
-if($municipio != "TODOS" && strlen($municipio) != 0)
-{
-   $filtro = $filtro . "and m.nombre = '$municipio' ";
+if ($municipio != "TODOS" && strlen($municipio) != 0) {
+    $filtro = $filtro . "and m.nombre = '$municipio' ";
 }
 
-if($vendedor != "TODOS")
-{
+if ($vendedor != "TODOS") {
     $filtro = $filtro . "and ro.nombre_vendedor = '$vendedor' ";
 }
-$orden = "order by ejecutivo,semana;";
+$orden    = "order by ejecutivo,semana;";
 $consulta = $consulta . $filtro . $orden;
 
-$stmt = $mysqli->prepare($consulta);
+$stmt = $conexion->prepare($consulta);
 
-    if (!$stmt) {
-        echo "<script>alertify.error('Error en la consulta SQL');</script>";
-        exit;
-    }
+if (! $stmt) {
+    echo "<script>alertify.error('Error en la consulta SQL');</script>";
+    exit;
+}
 
-    if ($mysqli->connect_error) {
-        echo "Hay error";
-        die("Error de conexión: " . $mysqli->connect_error);
-    }
+if ($conexion->connect_error) {
+    echo "Hay error";
+    die("Error de conexión: " . $conexion->connect_error);
+}
 
-    //$resultado = $mysqli->query($consulta);
+//$resultado = $mysqli->query($consulta);
 
-    $stmt->bind_param("ss", $fechaInicio, $fechaFinal);
-    $stmt->execute();
-    $resultado = $stmt->get_result();
+$stmt->bind_param("ss", $fechaInicio, $fechaFinal);
+$stmt->execute();
+$resultado = $stmt->get_result();
 
-    if ($resultado) {
-        $datos = $resultado->fetch_all(MYSQLI_ASSOC);
-        $mysqli->close();
-        //return $datos;
-    } else {
-        echo "Error en la consulta: " . $mysqli->error;
-        $mysqli->close();
-        $datos = null;
-    }
+if ($resultado) {
+    $datos = $resultado->fetch_all(MYSQLI_ASSOC);
+    $conexion->close();
+    //return $datos;
+} else {
+    echo "Error en la consulta: " . $conexion->error;
+    $conexion->close();
+    $datos = null;
+}
 
 echo json_encode($datos);
-?>

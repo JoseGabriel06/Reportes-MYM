@@ -1,122 +1,121 @@
 <?php
-session_start(); // Inicia sesión
+    session_start(); // Inicia sesión
 
-// Verifica si el usuario está autenticado
-if (!isset($_SESSION['usuario'])) {
-    header('Location: ../../../login/login.php'); // Redirige al login si no está autenticado
-    exit;
-}
-?>
-<!-- PARA LA TABLA -->
-<?php
-$consulta = "SELECT 
-dp.nombre as departamento,
-m.nombre as municipio,
-e.nombre as vendedor,
-c.primer_nombre as cliente,
-v.seriefactura,v.nofactura,
-s.monto,s.abono,s.saldo,
-v.fecha_registro as fecha_envio,
-s.fecha_vencimiento,
-if (datediff(now(), s.fecha_vencimiento) < 0,0,datediff(now(), s.fecha_vencimiento)) as dias_vencidos 
-from adm_venta v 
-join saldoxcobrar s on v.idventa = s.idventa 
-join db_rmym.clientes c on v.id_cliente = c.idcliente 
-join db_rmym.adm_empleado e on c.id_empleado = e.id_empleado
-join db_rmym.adm_departamentopais dp on c.iddepartamento = dp.iddepartamento
-join db_rmym.adm_municipio m on c.id_municipio = m.id_municipio
-where s.estado = 1 
-and v.estado > 0 
-and s.saldo > 0 
-and v.tipo in('E', 'F') 
-and v.id_envio = 0
-order by departamento,municipio;";
-
-// Función para obtener los datos
-function obtenerDatosDeBaseDeDatos($consulta)
-{
-    $servidor = '181.114.25.86';
-    $usuario = 'usr_mym';
-    $contrasena = 'Mym*20#*81@_)';
-    $port = 3307;
-    $baseDeDatos = 'db_mymsa';
-
-    $conexion = new mysqli($servidor, $usuario, $contrasena, $baseDeDatos,$port);
-
-    if ($conexion->connect_error) {
-        die("Error de conexión: " . $conexion->connect_error);
+    // Verifica si el usuario está autenticado
+    if (! isset($_SESSION['usuario'])) {
+        header('Location: ../../../login/login.php'); // Redirige al login si no está autenticado
+        exit;
     }
 
-    $resultado = $conexion->query($consulta);
 
-    if ($resultado) {
-        $datos = $resultado->fetch_all(MYSQLI_ASSOC);
-        $conexion->close();
-        return $datos;
-    } else {
-        echo "Error en la consulta: " . $conexion->error;
-        $conexion->close();
-        return null;
-    }
-}
+    require_once __DIR__ . '/../../../includes/db_connect.php';
+    $conexion = connectToDatabase('central');
 
-// Llamar la función y obtener los datos
-$resultado = obtenerDatosDeBaseDeDatos($consulta);
-?>
-<?php
-// Obtener opciones únicas para filtros
-function obtenerOpcionesFiltro($campo, $tabla) {
-    $servidor = '181.114.25.86';
-    $usuario = 'usr_mym';
-    $contrasena = 'Mym*20#*81@_)';
-    $port = 3307;
-    $baseDeDatos = 'db_mymsa';
+    $consulta = "SELECT
+                    dp.nombre as departamento,
+                    m.nombre as municipio,
+                    e.nombre as vendedor,
+                    c.primer_nombre as cliente,
+                    v.seriefactura,v.nofactura,
+                    s.monto,s.abono,s.saldo,
+                    v.fecha_registro as fecha_envio,
+                    s.fecha_vencimiento,
+                    if (datediff(now(), s.fecha_vencimiento) < 0,0,datediff(now(), s.fecha_vencimiento)) as dias_vencidos
+                    from adm_venta v
+                    join saldoxcobrar s on v.idventa = s.idventa
+                    join db_rmym.clientes c on v.id_cliente = c.idcliente
+                    join db_rmym.adm_empleado e on c.id_empleado = e.id_empleado
+                    join db_rmym.adm_departamentopais dp on c.iddepartamento = dp.iddepartamento
+                    join db_rmym.adm_municipio m on c.id_municipio = m.id_municipio
+                    where s.estado = 1
+                    and v.estado > 0
+                    and s.saldo > 0
+                    and v.tipo in('E', 'F')
+                    and v.id_envio = 0
+                    order by fecha_vencimiento,departamento,municipio;";
 
-    $conexion = new mysqli($servidor, $usuario, $contrasena, $baseDeDatos,$port);
+    // Función para obtener los datos
+    function obtenerDatosDeBaseDeDatos($consulta,$conexion)
+    {        
+        if ($conexion->connect_error) {
+            die("Error de conexión: " . $conexion->connect_error);
+        }
 
-    if ($conexion->connect_error) {
-        die("Error de conexión: " . $conexion->connect_error);
-    }
+        $resultado = $conexion->query($consulta);
 
-    $consulta = "SELECT DISTINCT $campo FROM $tabla ORDER BY $campo";
-    $resultado = $conexion->query($consulta);
-
-    $opciones = [];
-    if ($resultado) {
-        while ($fila = $resultado->fetch_assoc()) {
-            $opciones[] = $fila[$campo];
+        if ($resultado) {
+            $datos = $resultado->fetch_all(MYSQLI_ASSOC);
+            //$conexion->close();
+            return $datos;
+        } else {
+            echo "Error en la consulta: " . $conexion->error;
+            //$conexion->close();
+            return null;
         }
     }
 
+    // Llamar la función y obtener los datos
+    $resultado = obtenerDatosDeBaseDeDatos($consulta,$conexion);
+    //$conexion->close();
+
+
+    //require_once __DIR__ . '/../../../includes/db_connect.php';
+    //$conexion = connectToDatabase('central');
+    // Obtener opciones únicas para filtros
+    function obtenerOpcionesFiltro($campo, $tabla,$conexion)
+    {
+        // $servidor = '181.114.25.86';
+        // $usuario = 'usr_mym';
+        // $contrasena = 'Mym*20#*81@_)';
+        // $port = 3307;
+        // $baseDeDatos = 'db_mymsa';
+
+        // $conexion = new mysqli($servidor, $usuario, $contrasena, $baseDeDatos,$port);
+
+        if ($conexion->connect_error) {
+            die("Error de conexión: " . $conexion->connect_error);
+        }
+
+        $consulta  = "SELECT DISTINCT $campo FROM $tabla ORDER BY $campo";
+        $resultado = $conexion->query($consulta);
+
+        $opciones = [];
+        if ($resultado) {
+            while ($fila = $resultado->fetch_assoc()) {
+                $opciones[] = $fila[$campo];
+            }
+        }
+
+        #$conexion->close();
+        return $opciones;
+    }
+
+    // Obtener opciones para cada filtro
+    $departamentos = obtenerOpcionesFiltro('nombre', 'adm_departamentopais', $conexion);
+    $municipios    = obtenerOpcionesFiltro('nombre', 'adm_municipio', $conexion);
+    $vendedores    = obtenerOpcionesFiltro('nombre', 'adm_empleado', $conexion);
+    
+
+    // Inicializar acumuladores para los totales
+    $totalMonto = 0;
+    $totalAbono = 0;
+    $totalSaldo = 0;
+
+    // Sumar cada columna
+    foreach ($resultado as $fila) {
+        $totalMonto += $fila['monto'];
+        $totalAbono += $fila['abono'];
+        $totalSaldo += $fila['saldo'];
+    }
+
+    // Preparar datos para Chart.js
+    $totals = [
+        'monto' => $totalMonto,
+        'abono' => $totalAbono,
+        'saldo' => $totalSaldo,
+    ];
+
     $conexion->close();
-    return $opciones;
-}
-
-// Obtener opciones para cada filtro
-$departamentos = obtenerOpcionesFiltro('nombre', 'adm_departamentopais');
-$municipios = obtenerOpcionesFiltro('nombre', 'adm_municipio');
-$vendedores = obtenerOpcionesFiltro('nombre', 'adm_empleado');
-?>
-<!-- PARA LA GRÁFICA -->
-<?php
-// Inicializar acumuladores para los totales
-$totalMonto = 0;
-$totalAbono = 0;
-$totalSaldo = 0;
-
-// Sumar cada columna
-foreach ($resultado as $fila) {
-    $totalMonto += $fila['monto'];
-    $totalAbono += $fila['abono'];
-    $totalSaldo += $fila['saldo'];
-}
-
-// Preparar datos para Chart.js
-$totals = [
-    'monto' => $totalMonto,
-    'abono' => $totalAbono,
-    'saldo' => $totalSaldo
-];
 ?>
 
 <!DOCTYPE html>
@@ -271,7 +270,7 @@ $totals = [
 
 <script>
       // Inicializar Chart.js
-      const totals = <?php echo json_encode($totals); ?>;
+      const totals =                                                             <?php echo json_encode($totals); ?>;
     const ctx = document.getElementById('myChart').getContext('2d');
     let myChart = new Chart(ctx, {
         type: 'bar',
@@ -351,7 +350,7 @@ $totals = [
         myChart.data.datasets[0].data = [totalMonto, totalAbono, totalSaldo];
         myChart.update();
     }
-  
+
     // TABLA
     $(document).ready(function () {
         const table = $("#tabla-ventas").DataTable({
@@ -449,7 +448,7 @@ $totals = [
    <script>
 $(document).ready(function () {
     // Datos generados desde PHP
-    const datos = <?php echo json_encode($resultado); ?>;
+    const datos =                                                    <?php echo json_encode($resultado); ?>;
 
     // Llenar la tabla con los datos
     const tablaCuerpo = $("#tabla-ventas tbody");

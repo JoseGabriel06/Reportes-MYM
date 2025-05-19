@@ -1,10 +1,12 @@
 <?php
-require_once '../../connection.php';
+require_once __DIR__ . '/../../includes/db_connect.php';
+$conexion = connectToDatabase('central');
+
 $codigoProducto = $_POST["codigo"];
 
 $codigoRespuesta = 1;
 
-if ($mysqli !== null && $mysqli->connect_errno === 0) {
+if ($conexion !== null && $conexion->connect_errno === 0) {
     $stmt = "select " .
     "d.nombre as departamento," .
     "m.nombre as municipio," .
@@ -64,7 +66,7 @@ if ($mysqli !== null && $mysqli->connect_errno === 0) {
         "group by cliente " .
         "order by cliente;";
 
-    $result = $mysqli->query($stmt);
+    $result = $conexion->query($stmt);
 
     if ($result !== false) {
         if ($result->num_rows > 0) {
@@ -97,7 +99,7 @@ if ($mysqli !== null && $mysqli->connect_errno === 0) {
     } else {
         $codigoRespuesta = -2; //fallo en la consulta
     }
-    $mysqli->close();
+    $conexion->close();
 } else {
     $codigoRespuesta = -1; //fallo de conexión
 }

@@ -6,9 +6,10 @@ if (!isset($_SESSION['usuario'])) {
     header('Location: ../../../login/login.php'); // Redirige al login si no está autenticado
     exit;
 }
-?>
-<!-- PARA LA TABLA -->
-<?php
+
+ require_once __DIR__ . '/../../../includes/db_connect.php';
+    $conexion = connectToDatabase('xela');
+
 $consulta = "SELECT 
 dp.nombre as departamento,
 m.nombre as municipio,
@@ -31,19 +32,11 @@ and v.estado > 0
 and s.saldo > 0 
 and v.tipo in('E', 'F') 
 and v.id_envio = 0
-order by departamento,municipio;";
+order by fecha_vencimiento,departamento,municipio;";
 
 // Función para obtener los datos
-function obtenerDatosDeBaseDeDatos($consulta)
+function obtenerDatosDeBaseDeDatos($consulta,$conexion)
 {
-    $servidor = '181.114.25.86';
-    $usuario = 'usr_mym';
-    $contrasena = 'Mym*20#*81@_)';
-    $port = 3307;
-    $baseDeDatos = 'db_mymsa';
-
-    $conexion = new mysqli($servidor, $usuario, $contrasena, $baseDeDatos,$port);
-
     if ($conexion->connect_error) {
         die("Error de conexión: " . $conexion->connect_error);
     }
@@ -52,29 +45,20 @@ function obtenerDatosDeBaseDeDatos($consulta)
 
     if ($resultado) {
         $datos = $resultado->fetch_all(MYSQLI_ASSOC);
-        $conexion->close();
+        //$conexion->close();
         return $datos;
     } else {
         echo "Error en la consulta: " . $conexion->error;
-        $conexion->close();
+        //$conexion->close();
         return null;
     }
 }
 
 // Llamar la función y obtener los datos
-$resultado = obtenerDatosDeBaseDeDatos($consulta);
-?>
-<?php
+$resultado = obtenerDatosDeBaseDeDatos($consulta,$conexion);
+
 // Obtener opciones únicas para filtros
-function obtenerOpcionesFiltro($campo, $tabla) {
-    $servidor = '181.114.25.86';
-    $usuario = 'usr_mym';
-    $contrasena = 'Mym*20#*81@_)';
-    $port = 3307;
-    $baseDeDatos = 'db_mymsa';
-
-    $conexion = new mysqli($servidor, $usuario, $contrasena, $baseDeDatos,$port);
-
+function obtenerOpcionesFiltro($campo, $tabla,$conexion) {    
     if ($conexion->connect_error) {
         die("Error de conexión: " . $conexion->connect_error);
     }
@@ -89,17 +73,15 @@ function obtenerOpcionesFiltro($campo, $tabla) {
         }
     }
 
-    $conexion->close();
+    
     return $opciones;
 }
 
 // Obtener opciones para cada filtro
-$departamentos = obtenerOpcionesFiltro('nombre', 'adm_departamentopais');
-$municipios = obtenerOpcionesFiltro('nombre', 'adm_municipio');
-$vendedores = obtenerOpcionesFiltro('nombre', 'adm_empleado');
-?>
-<!-- PARA LA GRÁFICA -->
-<?php
+$departamentos = obtenerOpcionesFiltro('nombre', 'adm_departamentopais',$conexion);
+$municipios = obtenerOpcionesFiltro('nombre', 'adm_municipio',$conexion);
+$vendedores = obtenerOpcionesFiltro('nombre', 'adm_empleado',$conexion);
+
 // Inicializar acumuladores para los totales
 $totalMonto = 0;
 $totalAbono = 0;
@@ -118,6 +100,8 @@ $totals = [
     'abono' => $totalAbono,
     'saldo' => $totalSaldo
 ];
+
+$conexion->close(); 
 ?>
 
 <!DOCTYPE html>

@@ -1,5 +1,6 @@
 <?php
-require_once '../../connection.php';
+require_once __DIR__ . '/../../includes/db_connect.php';
+$conexion = connectToDatabase('central');
 // Consulta SQL
 $fechaInicio = $_POST["fechaInicio"];
 $fechaFinal = $_POST["fechaFinal"];
@@ -21,16 +22,16 @@ and date(v.fecha_registro) >= ? and date(v.fecha_registro) <= ?
 group by e.nombre
 order by e.nombre;";
 
-$stmt = $mysqli->prepare($consulta);
+$stmt = $conexion->prepare($consulta);
 
     if (!$stmt) {
         echo "<script>alertify.error('Error en la consulta SQL');</script>";
         exit;
     }
 
-    if ($mysqli->connect_error) {
+    if ($conexion->connect_error) {
         echo "Hay error";
-        die("Error de conexión: " . $mysqli->connect_error);
+        die("Error de conexión: " . $conexion->connect_error);
     }
 
     //$resultado = $mysqli->query($consulta);
@@ -41,11 +42,11 @@ $stmt = $mysqli->prepare($consulta);
 
     if ($resultado) {
         $datos = $resultado->fetch_all(MYSQLI_ASSOC);
-        $mysqli->close();
+        $conexion->close();
         //return $datos;
     } else {
-        echo "Error en la consulta: " . $mysqli->error;
-        $mysqli->close();
+        echo "Error en la consulta: " . $conexion->error;
+        $conexion->close();
         $datos = null;
     }
 
