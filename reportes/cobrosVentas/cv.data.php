@@ -27,7 +27,7 @@ join db_rmym.clientes cl on r.idcliente = cl.idcliente
 join db_rmym.adm_departamentopais dp on cl.iddepartamento = dp.iddepartamento
 join db_rmym.adm_municipio m on cl.id_municipio = m.id_municipio
 where r.estado > 0 and
-date(r.fecha_registro) >= ? and date(r.fecha_registro) <= ?";
+date(r.fecha_recibo) >= ? and date(r.fecha_recibo) <= ?";
 } else if ($sucursalId == 2) {
     $consulta = "SELECT
 r.nombre_vendedor,
@@ -38,7 +38,7 @@ join db_rmympt.clientes cl on r.idcliente = cl.idcliente
 join db_rmympt.adm_departamentopais dp on cl.iddepartamento = dp.iddepartamento
 join db_rmympt.adm_municipio m on cl.id_municipio = m.id_municipio
 where r.estado > 0 and
-date(r.fecha_registro) >= ? and date(r.fecha_registro) <= ?";
+date(r.fecha_recibo) >= ? and date(r.fecha_recibo) <= ?";
 } else if ($sucursalId == 3) {
     $consulta = "SELECT
 r.nombre_vendedor,
@@ -49,7 +49,7 @@ join db_rmymxela.clientes cl on r.idcliente = cl.idcliente
 join db_rmymxela.adm_departamentopais dp on cl.iddepartamento = dp.iddepartamento
 join db_rmymxela.adm_municipio m on cl.id_municipio = m.id_municipio
 where r.estado > 0 and
-date(r.fecha_registro) >= ? and date(r.fecha_registro) <= ?";
+date(r.fecha_recibo) >= ? and date(r.fecha_recibo) <= ?";
 }
 
 $grupo = " group by r.nombre_vendedor ";
@@ -104,6 +104,7 @@ if ($resultado) {
 /**
  * Consulta para ventas
  */
+
 $consulta = "SELECT
 e.nombre as nombre_vendedor,
 sum(v.total) as total_venta
@@ -117,6 +118,7 @@ and v.id_envio = 0
 and date(v.fecha_registro) >= ? and date(v.fecha_registro) <= ?
 group by e.nombre
 order by e.nombre;";
+
 
 $stmt = $conexion->prepare($consulta);
 
