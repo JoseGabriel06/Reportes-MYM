@@ -1,14 +1,24 @@
 <?php
 require_once __DIR__ . '/../../includes/db_connect.php';
-$conexion = connectToDatabase('central');
+
 // Consulta SQL
 $fechaInicio = $_POST["fechaInicio"];
 $fechaFinal  = $_POST["fechaFinal"];
-// $vendedor = $_POST["vendedor"];
+$sucursalId  = $_POST["sucursal"];
+$conexion = null;
+if ($sucursalId == 1) {
+    $conexion = connectToDatabase('central');
+} else if ($sucursalId == 2) {
+    $conexion = connectToDatabase('peten');
+} else if ($sucursalId == 3) {
+    $conexion = connectToDatabase('xela');
+}
 
-$filtro = "";
-// Consulta SQL
-$consulta = "SELECT
+$filtro   = "";
+$consulta = "";
+
+if ($sucursalId == 1) {
+    $consulta = "SELECT
 r.nombre_vendedor,
 r.semana,
 sum(r.monto_facturas) as total_cobro
@@ -18,11 +28,30 @@ join db_rmym.adm_departamentopais dp on cl.iddepartamento = dp.iddepartamento
 join db_rmym.adm_municipio m on cl.id_municipio = m.id_municipio
 where r.estado > 0 and
 date(r.fecha_registro) >= ? and date(r.fecha_registro) <= ?";
+} else if ($sucursalId == 2) {
+    $consulta = "SELECT
+r.nombre_vendedor,
+r.semana,
+sum(r.monto_facturas) as total_cobro
+from adm_recibo r
+join db_rmympt.clientes cl on r.idcliente = cl.idcliente
+join db_rmympt.adm_departamentopais dp on cl.iddepartamento = dp.iddepartamento
+join db_rmympt.adm_municipio m on cl.id_municipio = m.id_municipio
+where r.estado > 0 and
+date(r.fecha_registro) >= ? and date(r.fecha_registro) <= ?";
+} else if ($sucursalId == 3) {
+    $consulta = "SELECT
+r.nombre_vendedor,
+r.semana,
+sum(r.monto_facturas) as total_cobro
+from adm_recibo r
+join db_rmymxela.clientes cl on r.idcliente = cl.idcliente
+join db_rmymxela.adm_departamentopais dp on cl.iddepartamento = dp.iddepartamento
+join db_rmymxela.adm_municipio m on cl.id_municipio = m.id_municipio
+where r.estado > 0 and
+date(r.fecha_registro) >= ? and date(r.fecha_registro) <= ?";
+}
 
-// if($vendedor != "TODOS")
-// {
-//     $filtro = $filtro . "and ro.nombre_vendedor = '$vendedor' ";
-// }
 $grupo = " group by r.nombre_vendedor ";
 $orden = " order by r.nombre_vendedor; ";
 
