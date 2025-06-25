@@ -37,17 +37,6 @@ $regiones = [
   <link rel="stylesheet" href="../../css/datatables.min.css" />
   <link rel="stylesheet" href="css/estilos.css">
   <title>Reporte</title>
-
-  <style>
-    #region {
-      display: block !important;
-      border: 2px solid red;
-      padding: 5px;
-      margin: 10px 0;
-      background-color: #fff;
-      z-index: 9999;
-    }
-  </style>
 </head>
 
 <body onload="cargarFechas()">
@@ -108,9 +97,11 @@ $regiones = [
     </div>
 
     <div class="contenedor_tabla">
-      <div class="fecha">
-        <label for="region" class="subtitulo_fecha">Región</label>
-        <select name="region" id="region" class="campo_fecha">
+    <div class="contenedor_filtros">
+      <div class="contenedor_region">
+        <div class="region">
+        <label for="region" class="subtitulo_region">Región</label>
+        <select name="region" id="region" class="select_region">
           <option value="" disabled selected>-- Selecciona una región --</option>
           <?php foreach ($regiones as $valor => $nombre): ?>
             <option value="<?php echo $valor; ?>">
@@ -118,7 +109,9 @@ $regiones = [
             </option>
           <?php endforeach; ?>
         </select>
+        </div>
       </div>
+
       <div class="fechas">
         <div class="fecha">
           <label for="fecha_inicio" class="subtitulo_fecha">Fecha Inicio</label>
@@ -128,7 +121,11 @@ $regiones = [
           <label for="fecha_final" class="subtitulo_fecha">Fecha Final</label>
           <input type="date" id="fecha_final" name="fecha_final" class="campo_fecha">
         </div>
-      </div>      
+      </div>  
+    </div>
+  
+      
+      
       <div class="contenedor_btn">
         <button type="button" id="btnCarga" onclick="CargarListaRecibos()" class="btn_cargar">APLICAR FILTROS</button>
       </div>
