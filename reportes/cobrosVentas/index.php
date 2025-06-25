@@ -37,17 +37,6 @@ $regiones = [
   <link rel="stylesheet" href="../../css/datatables.min.css" />
   <link rel="stylesheet" href="css/estilos.css">
   <title>Reporte</title>
-
-  <style>
-    #region {
-      display: block !important;
-      border: 2px solid red;
-      padding: 5px;
-      margin: 10px 0;
-      background-color: #fff;
-      z-index: 9999;
-    }
-  </style>
 </head>
 
 <body onload="cargarFechas()">
@@ -108,9 +97,11 @@ $regiones = [
     </div>
 
     <div class="contenedor_tabla">
-      <div class="fecha">
-        <label for="region" class="subtitulo_fecha">Región</label>
-        <select name="region" id="region" class="campo_fecha">
+    <div class="contenedor_filtros">
+      <div class="contenedor_region">
+        <div class="region">
+        <label for="region" class="subtitulo_region">Región</label>
+        <select name="region" id="region" class="select_region">
           <option value="" disabled selected>-- Selecciona una región --</option>
           <?php foreach ($regiones as $valor => $nombre): ?>
             <option value="<?php echo $valor; ?>">
@@ -118,7 +109,9 @@ $regiones = [
             </option>
           <?php endforeach; ?>
         </select>
+        </div>
       </div>
+
       <div class="fechas">
         <div class="fecha">
           <label for="fecha_inicio" class="subtitulo_fecha">Fecha Inicio</label>
@@ -128,7 +121,11 @@ $regiones = [
           <label for="fecha_final" class="subtitulo_fecha">Fecha Final</label>
           <input type="date" id="fecha_final" name="fecha_final" class="campo_fecha">
         </div>
-      </div>      
+      </div>  
+    </div>
+  
+      
+      
       <div class="contenedor_btn">
         <button type="button" id="btnCarga" onclick="CargarListaRecibos()" class="btn_cargar">APLICAR FILTROS</button>
       </div>
@@ -156,6 +153,15 @@ $regiones = [
         </tfoot>
       </table>
     </div>
+
+        <!-- --- -->
+    <div class="contenedor_grafica" style="margin-top: 40px; width: 90%;">
+      <button class="exp_pdf" id="exportPDF">PDF</button>
+      <div class="grafica">
+      <canvas id="cobrosVentasChart" style="height: 100% !important;"></canvas>
+      </div>
+    </div>
+
   </main>
   <script src="../../js/sidebar.js"></script>
 
@@ -174,7 +180,14 @@ $regiones = [
   <script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.html5.min.js"></script>
   <script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.print.min.js"></script>
 
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+
   <script>
+    let cobrosVentasChart; // Variable para almacenar la instancia del gráfico
+
+    
     // Inicializar DataTable
     const table = $("#tabla-ventas").DataTable({
       paging: false, // Desactivar paginación
@@ -257,6 +270,10 @@ $regiones = [
           // const datos = JSON.stringify(object);             
           // datosInput.value = object;  
           table.clear();
+          // Extraer datos para la gráfica
+          const labels = [];
+          const dataCobro = [];
+          const dataVenta = [];
 
           object.forEach(fila => {
             table.row.add([
@@ -265,9 +282,20 @@ $regiones = [
               parseFloat(fila.total_cobro).toFixed(2),
               parseFloat(fila.total_venta).toFixed(2)
             ]);
+
+             // Datos para el gráfico
+            labels.push(fila.nombre_vendedor);
+            dataCobro.push(parseFloat(fila.total_cobro));
+            dataVenta.push(parseFloat(fila.total_venta));
+
           });
+
           // Dibuja la tabla nuevamente con los datos actualizados
           table.draw();
+
+        // Actualizar la gráfica con los nuevos datos
+          updateChart(labels, dataCobro, dataVenta);
+
         },
         error: function(jqXHR, textStatus, errorThrown) {
           console.log("Status: " + textStatus);
@@ -304,6 +332,122 @@ $regiones = [
     table.on('draw', function() {
       calcularTotales();
     });
+
+// --- Configuración y actualización de la gráfica ---
+
+  function initChart() {
+    const ctx = document.getElementById('cobrosVentasChart').getContext('2d');
+    cobrosVentasChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: [],
+        datasets: [{
+          label: 'Total Cobrado',
+          data: [],
+          backgroundColor: 'rgba(75, 192, 192, 0.6)',
+          borderColor: 'rgba(75, 192, 192, 1)',
+          borderWidth: 1
+        }, {
+          label: 'Total Vendido',
+          data: [],
+          backgroundColor: 'rgba(153, 102, 255, 0.6)',
+          borderColor: 'rgba(153, 102, 255, 1)',
+          borderWidth: 1
+        }]
+      },
+      options: {
+        responsive: true,
+        // Set maintainAspectRatio to false but ensure parent container has a height.
+        // Or set to true and manage canvas sizing via CSS/parent.
+        maintainAspectRatio: false, 
+        scales: {
+          y: {
+            beginAtZero: true,
+            title: {
+              display: true,
+              text: 'Monto (GTQ)'
+            },
+            ticks: {
+              callback: function(value, index, values) {
+                return new Intl.NumberFormat('es-GT', {
+                  style: 'currency',
+                  currency: 'GTQ'
+                }).format(value);
+              }
+            }
+          },
+          x: {
+            title: {
+              display: true,
+              text: 'Vendedor'
+            }
+          }
+        },
+        plugins: {
+          title: {
+            display: true,
+            text: 'Cobros y Ventas por Vendedor'
+          },
+          tooltip: {
+            callbacks: {
+              label: function(context) {
+                let label = context.dataset.label || '';
+                if (label) {
+                  label += ': ';
+                }
+                if (context.parsed.y !== null) {
+                  label += new Intl.NumberFormat('es-GT', {
+                    style: 'currency',
+                    currency: 'GTQ'
+                  }).format(context.parsed.y);
+                }
+                return label;
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+
+  // Función para actualizar los datos de la gráfica
+  function updateChart(labels, dataCobro, dataVenta) {
+    // Destroy the old chart instance before creating a new one if it exists
+    if (cobrosVentasChart) {
+        cobrosVentasChart.destroy();
+    }
+    initChart(); // Re-initialize the chart with the new data structure
+
+    cobrosVentasChart.data.labels = labels;
+    cobrosVentasChart.data.datasets[0].data = dataCobro;
+    cobrosVentasChart.data.datasets[1].data = dataVenta;
+    cobrosVentasChart.update();
+  }
+
+  // Initial setup when the page loads
+  document.addEventListener('DOMContentLoaded', function() {
+    cargarFechas(); // Set initial dates
+    initChart(); // Initialize chart structure
+    // Optionally, call CargarListaRecibos() here to load initial data for both table and chart
+    // CargarListaRecibos();
+  });
+  // Exportar a PDF
+document.getElementById('exportPDF').addEventListener('click', async () => {
+    const { jsPDF } = window.jspdf || window.jspdf;
+
+
+  // Usa la instancia correcta del gráfico
+  const imgData = cobrosVentasChart.toBase64Image();
+
+  // Crea el PDF y agrega la imagen
+  const pdf = new jsPDF();
+  const pdfWidth = 210; // A4 horizontal size (mm)
+  const imgWidth = 180; // Tu gráfico
+  const marginX = (pdfWidth - imgWidth) / 2;
+  pdf.addImage(imgData, 'PNG', marginX, 20, imgWidth, 100);
+  pdf.save('graficaSaldos.pdf'); // Nombre del archivo
+});
+
   </script>
 
   <script>
