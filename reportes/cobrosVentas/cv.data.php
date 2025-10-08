@@ -1,168 +1,197 @@
 <?php
+declare(strict_types=1);
+
+// Siempre JSON
+header('Content-Type: application/json; charset=utf-8');
+
+// No imprimir notices/warnings en HTML
+ini_set('display_errors', '0');
+error_reporting(E_ALL);
+
+// Forzar mysqli a lanzar excepciones (en vez de emitir HTML)
+mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
+
 require_once __DIR__ . '/../../includes/db_connect.php';
 
-// Consulta SQL
-$fechaInicio = $_POST["fechaInicio"];
-$fechaFinal  = $_POST["fechaFinal"];
-$sucursalId  = $_POST["sucursal"];
-$conexion = null;
-if ($sucursalId == 1) {
-    $conexion = connectToDatabase('central');
-} else if ($sucursalId == 2) {
-    $conexion = connectToDatabase('peten');
-} else if ($sucursalId == 3) {
-    $conexion = connectToDatabase('xela');
-}
-
-$filtro   = "";
-$consulta = "";
-
-if ($sucursalId == 1) {
-    $consulta = "SELECT
-r.nombre_vendedor,
-r.semana,
-sum(r.monto_facturas) as total_cobro
-from adm_recibo r
-join db_rmym.clientes cl on r.idcliente = cl.idcliente
-join db_rmym.adm_departamentopais dp on cl.iddepartamento = dp.iddepartamento
-join db_rmym.adm_municipio m on cl.id_municipio = m.id_municipio
-where r.estado > 0 and
-date(r.fecha_recibo) >= ? and date(r.fecha_recibo) <= ?";
-} else if ($sucursalId == 2) {
-    $consulta = "SELECT
-r.nombre_vendedor,
-r.semana,
-sum(r.monto_facturas) as total_cobro
-from adm_recibo r
-join db_rmympt.clientes cl on r.idcliente = cl.idcliente
-join db_rmympt.adm_departamentopais dp on cl.iddepartamento = dp.iddepartamento
-join db_rmympt.adm_municipio m on cl.id_municipio = m.id_municipio
-where r.estado > 0 and
-date(r.fecha_recibo) >= ? and date(r.fecha_recibo) <= ?";
-} else if ($sucursalId == 3) {
-    $consulta = "SELECT
-r.nombre_vendedor,
-r.semana,
-sum(r.monto_facturas) as total_cobro
-from adm_recibo r
-join db_rmymxela.clientes cl on r.idcliente = cl.idcliente
-join db_rmymxela.adm_departamentopais dp on cl.iddepartamento = dp.iddepartamento
-join db_rmymxela.adm_municipio m on cl.id_municipio = m.id_municipio
-where r.estado > 0 and
-date(r.fecha_recibo) >= ? and date(r.fecha_recibo) <= ?";
-}
-
-$grupo = " group by r.nombre_vendedor ";
-$orden = " order by r.nombre_vendedor; ";
-
-$consulta = $consulta . $filtro . $grupo . $orden;
-
-$stmt = $conexion->prepare($consulta);
-
-if (! $stmt) {
-    echo "<script>alertify.error('Error en la consulta SQL');</script>";
+// ---------- Helpers ----------
+function json_fail(int $http_code, string $error_code, string $message, array $context = []): void {
+    http_response_code($http_code);
+    echo json_encode([
+        'ok' => false,
+        'error_code' => $error_code,
+        'error_message' => $message,
+        'context' => $context,
+    ], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
-if ($conexion->connect_error) {
-    echo "Hay error";
-    die("Error de conexión: " . $conexion->connect_error);
+function json_ok(array $payload): void {
+    echo json_encode(array_merge(['ok' => true], $payload), JSON_UNESCAPED_UNICODE);
+    exit;
 }
 
-//$resultado = $mysqli->query($consulta);
+function valid_date(string $d): bool {
+    $dt = DateTime::createFromFormat('Y-m-d', $d);
+    return $dt && $dt->format('Y-m-d') === $d;
+}
 
-$stmt->bind_param("ss", $fechaInicio, $fechaFinal);
-$stmt->execute();
-$resultado = $stmt->get_result();
+// ---------- Entradas ----------
+$fechaInicio = $_POST['fechaInicio'] ?? null;
+$fechaFinal  = $_POST['fechaFinal']  ?? null;
+$sucursalId  = $_POST['sucursal']    ?? null;
 
-if ($resultado) {
-    //$datos = $resultado->fetch_all(MYSQLI_ASSOC);
-    if ($resultado->num_rows > 0) {
-        $return_arr = [];
-        $indice     = 0;
-        while ($row = $resultado->fetch_array()) {
-            $return_arr[$indice] = [
-                'nombre_vendedor' => $row['nombre_vendedor'],
-                'semana'          => $row['semana'],
-                'total_cobro'     => $row['total_cobro'],
-                'total_venta'     => 0,
+// Validaciones básicas
+if ($fechaInicio === null || $fechaFinal === null || $sucursalId === null) {
+    json_fail(400, 'BAD_REQUEST', 'Parámetros requeridos: fechaInicio, fechaFinal, sucursal.');
+}
+
+if (!is_string($fechaInicio) || !is_string($fechaFinal) || !valid_date($fechaInicio) || !valid_date($fechaFinal)) {
+    json_fail(400, 'INVALID_DATE', 'Formato de fecha inválido. Usa YYYY-MM-DD.', [
+        'fechaInicio' => $fechaInicio,
+        'fechaFinal'  => $fechaFinal,
+    ]);
+}
+
+$sucursalId = (int)$sucursalId;
+if (!in_array($sucursalId, [1, 2, 3], true)) {
+    json_fail(400, 'INVALID_BRANCH', 'Sucursal inválida. Usa 1 (central), 2 (peten), 3 (xela).', [
+        'sucursal' => $sucursalId
+    ]);
+}
+
+// Mapear sucursal a nombre de conexión y schema
+$map = [
+    1 => ['conn' => 'central', 'schema' => 'db_rmym'],
+    2 => ['conn' => 'peten',   'schema' => 'db_rmympt'],
+    3 => ['conn' => 'xela',    'schema' => 'db_rmymxela'],
+];
+
+$conf = $map[$sucursalId];
+
+// ---------- Conexión ----------
+try {
+    $conexion = connectToDatabase($conf['conn']); // Debe devolver mysqli conectado al DB correcto
+    if (!$conexion instanceof mysqli) {
+        json_fail(500, 'CONNECT_RETURN', 'connectToDatabase no retornó una conexión válida.', ['conexion_tipo' => gettype($conexion)]);
+    }
+    $conexion->set_charset('utf8mb4');
+} catch (Throwable $e) {
+    json_fail(500, 'DB_CONNECT_ERROR', 'No se pudo abrir la conexión a la base de datos.', [
+        'exception' => get_class($e),
+        'message'   => $e->getMessage(),
+    ]);
+}
+
+// ---------- Consulta 1: Cobros por vendedor/semana ----------
+$schema = $conexion->real_escape_string($conf['schema']); // solo por seguridad al interpolar nombre de schema
+
+$sqlCobros = "
+    SELECT
+        r.nombre_vendedor,
+        r.semana,
+        SUM(r.monto_facturas) AS total_cobro
+    FROM adm_recibo AS r
+    JOIN {$schema}.clientes              AS cl ON r.idcliente     = cl.idcliente
+    JOIN {$schema}.adm_departamentopais  AS dp ON cl.iddepartamento = dp.iddepartamento
+    JOIN {$schema}.adm_municipio         AS m  ON cl.id_municipio = m.id_municipio
+    WHERE r.estado > 0
+      AND DATE(r.fecha_recibo) >= ?
+      AND DATE(r.fecha_recibo) <= ?
+    GROUP BY r.nombre_vendedor, r.semana
+    ORDER BY r.nombre_vendedor
+";
+
+$rows = []; // acumulador final (por vendedor)
+$diag = ['cobros_count' => 0, 'ventas_count' => 0];
+
+try {
+    $stmt = $conexion->prepare($sqlCobros);
+    $stmt->bind_param('ss', $fechaInicio, $fechaFinal);
+    $stmt->execute();
+    $res = $stmt->get_result();
+
+    // Mapa por nombre_vendedor para mezclar luego ventas
+    $bySeller = [];
+    while ($row = $res->fetch_assoc()) {
+        $key = $row['nombre_vendedor'];
+        $bySeller[$key] = [
+            'nombre_vendedor' => $row['nombre_vendedor'],
+            'semana'          => $row['semana'],
+            'total_cobro'     => (float)$row['total_cobro'],
+            'total_venta'     => 0.0,
+        ];
+        $diag['cobros_count']++;
+    }
+    $res->close();
+    $stmt->close();
+} catch (Throwable $e) {
+    json_fail(500, 'SQL_COBROS_ERROR', 'Fallo al obtener cobros.', [
+        'exception' => get_class($e),
+        'message'   => $e->getMessage(),
+        'sql'       => 'sqlCobros',
+    ]);
+}
+
+// ---------- Consulta 2: Ventas por vendedor ----------
+$sqlVentas = "
+    SELECT
+        e.nombre AS nombre_vendedor,
+        SUM(v.total) AS total_venta
+    FROM adm_venta v
+    JOIN pedido_producto p ON v.idpedido = p.idpedido
+    JOIN adm_empleado e    ON p.id_empleado = e.id_empleado
+    WHERE v.estado = 1
+      AND v.tipo IN ('E','F')
+      AND v.id_envio = 0
+      AND DATE(v.fecha_registro) >= ?
+      AND DATE(v.fecha_registro) <= ?
+    GROUP BY e.nombre
+    ORDER BY e.nombre
+";
+
+try {
+    $stmt = $conexion->prepare($sqlVentas);
+    $stmt->bind_param('ss', $fechaInicio, $fechaFinal);
+    $stmt->execute();
+    $res = $stmt->get_result();
+
+    while ($row = $res->fetch_assoc()) {
+        $seller = $row['nombre_vendedor'];
+        $venta  = (float)$row['total_venta'];
+
+        if (isset($bySeller[$seller])) {
+            $bySeller[$seller]['total_venta'] = $venta;
+        } else {
+            // Si hay ventas de un vendedor que no cobró en el rango, lo agregamos igual
+            $bySeller[$seller] = [
+                'nombre_vendedor' => $seller,
+                'semana'          => null,
+                'total_cobro'     => 0.0,
+                'total_venta'     => $venta,
             ];
-            $indice++;
         }
-
-        //echo json_encode($return_arr);
-        $resultado->close();
-    } else {
-        //$codigoRespuesta = -3; //no hay registros
-        $resultado->close();
+        $diag['ventas_count']++;
     }
-} else {
-    echo "Error en la consulta: " . $conexion->error;
-    $datos = null;
+    $res->close();
+    $stmt->close();
+} catch (Throwable $e) {
+    json_fail(500, 'SQL_VENTAS_ERROR', 'Fallo al obtener ventas.', [
+        'exception' => get_class($e),
+        'message'   => $e->getMessage(),
+        'sql'       => 'sqlVentas',
+    ]);
 }
 
-/**
- * Consulta para ventas
- */
-
-$consulta = "SELECT
-e.nombre as nombre_vendedor,
-sum(v.total) as total_venta
-from adm_venta v
-join pedido_producto p on v.idpedido = p.idpedido
-join adm_empleado e on p.id_empleado = e.id_empleado
-where
-v.estado = 1
-and v.tipo in('E','F')
-and v.id_envio = 0
-and date(v.fecha_registro) >= ? and date(v.fecha_registro) <= ?
-group by e.nombre
-order by e.nombre;";
-
-
-$stmt = $conexion->prepare($consulta);
-
-if (! $stmt) {
-    echo "<script>alertify.error('Error en la consulta SQL');</script>";
-    exit;
-}
-
-if ($conexion->connect_error) {
-    echo "Hay error";
-    die("Error de conexión: " . $conexion->connect_error);
-}
-
-//$resultado = $mysqli->query($consulta);
-
-$stmt->bind_param("ss", $fechaInicio, $fechaFinal);
-$stmt->execute();
-$resultado = $stmt->get_result();
-
-if ($resultado) {
-    //$datos = $resultado->fetch_all(MYSQLI_ASSOC);
-    if ($resultado->num_rows > 0) {
-        $indice = 0;
-        while ($row = $resultado->fetch_array()) {
-            //foreach($return_arr as $item)
-            for ($i = 0; $i < sizeof($return_arr); $i++) {
-                if ($return_arr[$i]["nombre_vendedor"] === $row["nombre_vendedor"]) {
-                    //$item["total_venta"] = $row["total_venta"];
-                    $return_arr[$i]["total_venta"] = $row["total_venta"];
-                    break;
-                }
-            }
-        }
-
-        //echo json_encode($return_arr);
-        $resultado->close();
-    } else {
-        //$codigoRespuesta = -3; //no hay registros
-        $resultado->close();
-    }
-} else {
-    echo "Error en la consulta: " . $conexion->error;
-    $datos = null;
-}
-
+// ---------- Salida ----------
 $conexion->close();
-echo json_encode($return_arr);
+
+// Normalizamos a lista
+$rows = array_values($bySeller);
+
+// Entregamos éxito con un pequeño bloque de diagnóstico
+json_ok([
+    'sucursal' => $sucursalId,
+    'rango'    => ['desde' => $fechaInicio, 'hasta' => $fechaFinal],
+    'rows'     => $rows,
+    'diagnostics' => $diag
+]);
