@@ -1,7 +1,7 @@
 <?php
 
 return (object) array(
-    'host' => '181.114.25.86',
+    'host' => '138.118.104.205',
     'username' => 'usr_mym',
     'pass' => 'Mym*20#*81@_)',
     'database' => 'db_mymsa',
