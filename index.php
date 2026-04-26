@@ -46,28 +46,80 @@ if (!isset($_SESSION['usuario'])) {
 
         <ul class="sub-menu show">
           <div>
+
             <li>
               <button onclick=toggleSubMenu2(this) class="dropdown-btn">
-                <span class="texto_menu">Saldos</span>
+                <span>Saldos</span>
                 <i class='bx bx-chevron-down'></i>
               </button>
+
               <ul class="sub-menu2">
                 <div>
                   <li><a href="reportes/saldos/central">Central</a></li>
-                  <li><a href="reportes/saldos/peten">Peten</a></li>
+                  <li><a href="reportes/saldos/peten">Petén</a></li>
                   <li><a href="reportes/saldos/xela">Xela</a></li>
                 </div>
               </ul>
             </li>
-            <li><a href="reportes/recibos">Recibos</a></li>
-            <li><a href="reportes/cobrosVentas">Resumen CV</a></li>
-            <li><a href="reportes/productoClientes">Producto Clientes</a></li>
+
             <li>
-              <a href="reportes/dashboard/index.php">
-                <i class='bx bx-line-chart'></i>
-                <span class="texto_menu">Dashboard Ejecutivo RDX</span>
+              <a href="reportes/recibos">
+                <i class='bx bx-receipt'></i>
+                Recibos
               </a>
             </li>
+
+            <li>
+              <a href="reportes/cobrosVentas">
+                <i class='bx bx-money'></i>
+                Resumen CV
+              </a>
+            </li>
+
+            <li>
+              <a href="reportes/productoClientes">
+                <i class='bx bx-package'></i>
+                Producto Clientes
+              </a>
+            </li>
+
+
+            <li>
+              <button onclick=toggleSubMenu2(this) class="dropdown-btn">
+                <i class='bx bx-pulse'></i>
+                <span>Inteligencia Radiex</span>
+                <i class='bx bx-chevron-down'></i>
+              </button>
+
+              <ul class="sub-menu2">
+                <div>
+
+                  <li>
+                    <a href="reportes/dashboard/index.php">
+                      Dashboard Ejecutivo
+                    </a>
+                  </li>
+
+                  <li>
+                    <a href="reportes/dashboard/radiex/auxiliar_cartera_rdx.php">
+                      Cartera Radiex por Cliente
+                    </a>
+                  </li>
+
+                  <li>
+                    <a href="reportes/dashboard/radiex/cobros_ventas_rdx.php">
+                      Ventas Radiex
+                    </a>
+                  </li>
+                  <li>
+                    <a href="reportes/dashboard/radiex/cobros_rdx.php">                     
+                        Cobros Radiex                    
+                    </a>
+                  </li>
+                </div>
+              </ul>
+            </li>
+
           </div>
         </ul>
       </li>

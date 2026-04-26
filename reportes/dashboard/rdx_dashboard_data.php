@@ -36,50 +36,111 @@ function generarResumen($conn, $fechaInicio, $fechaFinal)
     $delete->close();
 
     $sql = "
-    SELECT 
-        p.idproducto,
-        p.codigormym,
-        p.nombre,
-        IFNULL(pp.costo,0) AS costo,
-        SUM(d.cantidad) cantidad,
-        SUM(d.total) total_general,
 
-        SUM(
-            CASE 
-                WHEN sc.saldo = 0 
-                     AND r.fecha_recibo IS NOT NULL
-                     AND DATEDIFF(r.fecha_recibo, v.fecha_registro) <= 7
-                THEN d.total
-                ELSE 0
-            END
-        ) AS total_contado,
+SELECT
+p.idproducto,
+p.codigormym,
+p.nombre,
+IFNULL(pp.costo,0) costo,
 
-        SUM(
-            CASE 
-                WHEN sc.saldo > 0 
-                     OR r.fecha_recibo IS NULL
-                     OR DATEDIFF(r.fecha_recibo, v.fecha_registro) > 7
-                THEN d.total
-                ELSE 0
-            END
-        ) AS total_credito
+SUM(t.cantidad_rdx) cantidad,
+SUM(t.total_rdx) total_general,
 
-    FROM adm_venta v
-    JOIN adm_detalle_venta d ON v.idventa=d.idventa
-    JOIN adm_producto p ON p.idproducto=d.idproducto
-    JOIN precio_producto pp ON pp.idproducto = p.idproducto
-    LEFT JOIN saldoxcobrar sc ON sc.idventa=v.idventa
-    LEFT JOIN adm_facturas_recibo fr ON fr.idventa=v.idventa
-    LEFT JOIN adm_recibo r ON r.idrecibo=fr.idrecibo
+SUM(
+CASE
+WHEN t.es_credito=0
+THEN t.total_rdx
+ELSE 0
+END
+) total_contado,
 
-    WHERE v.estado>0
-    AND v.tipo IN ('F','E')
-    AND NOT (v.tipo='F' AND v.id_envio>0)
-    AND p.codigormym LIKE '%RDX%'
-    AND DATE(v.fecha_registro) BETWEEN ? AND ?
+SUM(
+CASE
+WHEN t.es_credito=1
+THEN t.total_rdx
+ELSE 0
+END
+) total_credito
 
-    GROUP BY p.idproducto,p.codigormym,p.nombre,pp.costo
-    ";
+FROM (
+
+SELECT
+
+v.idventa,
+d.idproducto,
+
+SUM(d.cantidad) cantidad_rdx,
+SUM(d.total) total_rdx,
+
+CASE
+WHEN sc.saldo>0
+OR r.fecha_recibo IS NULL
+OR DATEDIFF(
+r.fecha_recibo,
+v.fecha_registro
+)>7
+THEN 1
+ELSE 0
+END es_credito
+
+FROM adm_venta v
+
+JOIN adm_detalle_venta d
+ON d.idventa=v.idventa
+
+JOIN adm_producto p
+ON p.idproducto=d.idproducto
+
+LEFT JOIN saldoxcobrar sc
+ON sc.idventa=v.idventa
+
+LEFT JOIN (
+SELECT
+fr.idventa,
+MIN(r.fecha_recibo) fecha_recibo
+FROM adm_facturas_recibo fr
+JOIN adm_recibo r
+ON r.idrecibo=fr.idrecibo
+GROUP BY fr.idventa
+) r
+ON r.idventa=v.idventa
+
+WHERE
+v.estado > 0
+AND v.tipo IN('F','E')
+AND NOT(
+v.tipo='F'
+AND v.id_envio>0
+)
+AND p.codigormym LIKE '%RDX%'
+AND DATE(v.fecha_registro)
+BETWEEN ? AND ?
+
+GROUP BY
+v.idventa,
+d.idproducto
+
+)t
+
+JOIN adm_producto p
+ON p.idproducto=t.idproducto
+
+LEFT JOIN (
+SELECT
+idproducto,
+MAX(costo) costo
+FROM precio_producto
+GROUP BY idproducto
+) pp
+ON pp.idproducto=p.idproducto
+
+GROUP BY
+p.idproducto,
+p.codigormym,
+p.nombre,
+pp.costo
+
+";
 
     $stmt = $conn->prepare($sql);
     $stmt->bind_param("ss", $fechaInicio, $fechaFinal);
