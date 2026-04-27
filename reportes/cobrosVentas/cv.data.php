@@ -78,7 +78,7 @@ $sqlCobros = "
 ";
 
 // 🔁 JOIN SEGÚN SUCURSAL (CRÍTICO)
-if ($sucursalId == 2) { // PETÉN
+if ($sucursalId == 2 || $sucursalId == 3) { // PETÉN
     $sqlCobros .= "
         JOIN {$schema}.adm_usuario u 
             ON r.id_usuario = u.usuario_app
