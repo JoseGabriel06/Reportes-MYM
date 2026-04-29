@@ -7,7 +7,10 @@ header('Content-Type: application/json; charset=utf-8');
 ini_set('display_errors', 0);
 error_reporting(E_ALL);
 
-mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
+mysqli_report(
+    MYSQLI_REPORT_ERROR |
+        MYSQLI_REPORT_STRICT
+);
 
 require_once '../../../includes/db_connect.php';
 
@@ -41,9 +44,8 @@ try {
 
     if (!isset($map[$sucursal])) {
         salir([
-            "rows" => [],
-            "totalCobrado" => 0,
-            "debug" => "Sucursal inválida"
+            'rows' => [],
+            'totalCobrado' => 0
         ]);
     }
 
@@ -54,16 +56,15 @@ try {
         );
 
     $conn->set_charset(
-        "utf8mb4"
+        'utf8mb4'
     );
 
 
     /*
-==================================================
-SE EVITA DUPLICAR COBROS:
-1 fila por recibo + venta
-luego consolidado por vendedor
-==================================================
+==========================================
+COBRO RDX REAL
+(ventas parcialmente pagadas ajustadas)
+==========================================
 */
 
     $sql = "
@@ -72,17 +73,25 @@ SELECT
 
 base.vendedor,
 
-SUM(base.cobro_rdx) total_cobrado,
+SUM(
+base.cobrado_rdx_real
+) total_cobrado,
 
-COUNT(DISTINCT base.idrecibo) recibos,
+COUNT(
+DISTINCT base.idrecibo
+) recibos,
 
-COUNT(DISTINCT base.idventa) ventas_cobradas
+COUNT(
+DISTINCT base.idventa
+) ventas_cobradas
 
-FROM (
+
+FROM(
 
 SELECT DISTINCT
 
 r.idrecibo,
+
 fr.idventa,
 
 COALESCE(
@@ -90,19 +99,41 @@ e.nombre,
 'SIN VENDEDOR'
 ) vendedor,
 
-r.monto_facturas,
 
+/* COBRO REAL RADIEX */
+CASE
+
+/* si saldo quedó mayor que radiex
+no se ha cobrado nada de rdx */
+WHEN IFNULL(sc.saldo,0)
+>= rdx.total_rdx
+THEN 0
+
+
+/* si hay saldo parcial
+cobrado = radiex - saldo proporcional */
+WHEN IFNULL(sc.saldo,0)>0
+AND sc.saldo<rdx.total_rdx
+
+THEN
+rdx.total_rdx
+-
+ROUND(
+sc.saldo*
+(
+rdx.total_rdx/
+NULLIF(
 tot.total_venta,
-
-rdx.total_rdx,
-
-(
-r.monto_facturas *
-(
-rdx.total_rdx /
-NULLIF(tot.total_venta,0)
+0
 )
-) cobro_rdx
+),2)
+
+
+/* pagado totalmente */
+ELSE rdx.total_rdx
+
+END cobrado_rdx_real
+
 
 FROM adm_recibo r
 
@@ -117,6 +148,10 @@ ON pp.idpedido=v.idpedido
 
 LEFT JOIN adm_empleado e
 ON e.id_empleado=pp.id_empleado
+
+
+LEFT JOIN saldoxcobrar sc
+ON sc.idventa=v.idventa
 
 
 JOIN(
@@ -143,16 +178,35 @@ ON rdx.idventa=v.idventa
 
 
 WHERE
+
 r.estado>0
 
-AND DATE(r.fecha_recibo)
+AND v.estado=1
+
+AND v.tipo IN(
+'F',
+'E'
+)
+
+AND NOT(
+v.tipo='F'
+AND v.id_envio>0
+)
+
+AND DATE(
+r.fecha_recibo
+)
 BETWEEN ?
 AND ?
 
-) base
+)base
 
-GROUP BY base.vendedor
-ORDER BY base.vendedor
+
+GROUP BY
+base.vendedor
+
+ORDER BY
+base.vendedor
 
 ";
 
@@ -192,7 +246,6 @@ ORDER BY base.vendedor
         $r["ventas_cobradas"] =
             (int)$r["ventas_cobradas"];
 
-
         $data[] = $r;
 
         $totalCobrado +=
@@ -201,13 +254,13 @@ ORDER BY base.vendedor
 
 
     $stmt->close();
+
     $conn->close();
 
 
     salir([
 
         "data" => $data,
-
         "rows" => $data,
 
         "totalCobrado" => round(

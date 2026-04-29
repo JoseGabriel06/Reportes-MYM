@@ -4,15 +4,24 @@ header('Content-Type: application/json');
 
 require_once '../../../includes/db_connect.php';
 
-$sucursal = (int)$_POST["sucursal"];
+$sucursal = (int)($_POST["sucursal"] ?? 1);
 
-$fechaInicio = $_POST["fechaInicio"];
-$fechaFinal = $_POST["fechaFinal"];
+$fechaInicio = $_POST["fechaInicio"] ?? null;
+$fechaFinal  = $_POST["fechaFinal"] ?? null;
 
-$tipoPago = $_POST["tipoPago"];
+$tipoPago = $_POST["tipoPago"] ?? 'TODOS';
 
 $iddepto = $_POST["departamento"] ?? '';
-$idmuni = $_POST["municipio"] ?? '';
+$idmuni  = $_POST["municipio"] ?? '';
+
+if (!$fechaInicio || !$fechaFinal) {
+    echo json_encode([
+        'data' => [],
+        'totalPendiente' => 0,
+        'totalClientes' => 0
+    ]);
+    exit;
+}
 
 $map = [
     1 => 'central',
@@ -20,13 +29,8 @@ $map = [
     3 => 'xela'
 ];
 
-$conn =
-    connectToDatabase(
-        $map[$sucursal]
-    );
-
+$conn = connectToDatabase($map[$sucursal]);
 $conn->set_charset("utf8mb4");
-
 
 $clientesDb = [
     1 => 'db_rmym',
@@ -34,9 +38,7 @@ $clientesDb = [
     3 => 'db_rmymxela'
 ];
 
-$schemaClientes =
-    $clientesDb[$sucursal];
-
+$schemaClientes = $clientesDb[$sucursal];
 
 $filtro = '';
 
@@ -52,26 +54,28 @@ AND c.id_municipio=$idmuni
 ";
 }
 
-
 $having = '';
 
-if ($tipoPago == "CONTADO") {
+if ($tipoPago == 'CONTADO') {
     $having = "
-HAVING SUM(t.pendiente)=0
+HAVING SUM(t.saldo_rdx)=0
 ";
 }
 
-if ($tipoPago == "CREDITO") {
+if ($tipoPago == 'CREDITO') {
     $having = "
-HAVING SUM(t.pendiente)>0
+HAVING SUM(t.saldo_rdx)>0
 ";
 }
 
-
-
-/*=====================================
-DETALLE
-=====================================*/
+/*
+=============================================
+DETALLE CORREGIDO
+- excluye saldos cancelados
+- saldo RDX proporcional
+- si saldo general cubre RDX completo toma RDX
+=============================================
+*/
 
 $sql = "
 
@@ -88,14 +92,14 @@ t.departamento,
 t.municipio,
 
 CASE
-WHEN SUM(t.pendiente)>0
+WHEN SUM(t.saldo_rdx)>0
 THEN 'CREDITO'
 ELSE 'CONTADO'
 END tipo_pago,
 
 CASE
-WHEN SUM(t.pendiente)>0
-THEN SUM(t.pendiente)
+WHEN SUM(t.saldo_rdx)>0
+THEN SUM(t.saldo_rdx)
 ELSE SUM(t.contado_monto)
 END pendiente,
 
@@ -119,20 +123,25 @@ mun.nombre municipio,
 
 e.nombre vendedor,
 
-
+/*
+SALDO RADIEX CORREGIDO
+*/
 CASE
-WHEN
+
+WHEN IFNULL(sc.saldo,0)=0
+THEN 0
+
+WHEN sc.saldo >= tot.total_rdx
+THEN tot.total_rdx
+
+ELSE ROUND(
+sc.saldo *
 (
-IFNULL(sc.saldo,0)>0
-OR fr.primer_recibo IS NULL
-OR DATEDIFF(
-fr.primer_recibo,
-v.fecha_registro
-)>7
-)
-THEN SUM(d.total)
-ELSE 0
-END pendiente,
+tot.total_rdx/
+NULLIF(tot.total_factura,0)
+),2)
+
+END saldo_rdx,
 
 
 CASE
@@ -143,7 +152,7 @@ AND DATEDIFF(
 fr.primer_recibo,
 v.fecha_registro
 )<=7
-THEN SUM(d.total)
+THEN tot.total_rdx
 ELSE 0
 END contado_monto,
 
@@ -160,11 +169,24 @@ END dias_vencidos
 
 FROM adm_venta v
 
-JOIN adm_detalle_venta d
-ON d.idventa=v.idventa
-
+/* factura total */
+JOIN(
+SELECT
+idventa,
+SUM(total) total_factura,
+SUM(
+CASE
+WHEN p.codigormym LIKE '%RDX%'
+THEN d.total
+ELSE 0
+END
+) total_rdx
+FROM adm_detalle_venta d
 JOIN adm_producto p
 ON p.idproducto=d.idproducto
+GROUP BY idventa
+) tot
+ON tot.idventa=v.idventa
 
 JOIN {$schemaClientes}.clientes c
 ON c.idcliente=v.id_cliente
@@ -181,10 +203,8 @@ ON pp.idpedido=v.idpedido
 JOIN adm_empleado e
 ON e.id_empleado=pp.id_empleado
 
-
 LEFT JOIN saldoxcobrar sc
 ON sc.idventa=v.idventa
-
 
 LEFT JOIN(
 SELECT
@@ -197,10 +217,9 @@ GROUP BY fr.idventa
 ) fr
 ON fr.idventa=v.idventa
 
-
 WHERE
 
-v.estado>0
+v.estado=1
 
 AND v.tipo IN('F','E')
 
@@ -209,7 +228,8 @@ v.tipo='F'
 AND v.id_envio>0
 )
 
-AND p.codigormym LIKE '%RDX%'
+/* solo ventas que sí tienen radiex */
+AND tot.total_rdx>0
 
 AND DATE(v.fecha_registro)
 BETWEEN ?
@@ -218,7 +238,6 @@ AND ?
 $filtro
 
 GROUP BY
-
 v.idventa,
 v.fecha_registro,
 c.primer_nombre,
@@ -226,11 +245,14 @@ dep.nombre,
 mun.nombre,
 e.nombre,
 sc.saldo,
-fr.primer_recibo
+fr.primer_recibo,
+tot.total_factura,
+tot.total_rdx
 
 )t
 
 GROUP BY
+
 t.cliente,
 t.departamento,
 t.municipio,
@@ -239,6 +261,7 @@ t.vendedor
 $having
 
 ORDER BY
+
 t.departamento,
 t.municipio,
 tipo_pago,
@@ -255,7 +278,6 @@ $stmt->bind_param(
 );
 
 $stmt->execute();
-
 $res = $stmt->get_result();
 
 $data = [];
@@ -268,58 +290,90 @@ while ($r = $res->fetch_assoc()) {
 
 $stmt->close();
 
-
-
-/*=====================================
-KPI OFICIAL SEGÚN FILTRO
-=====================================*/
+/*
+=============================================
+KPI OFICIAL CORREGIDO
+=============================================
+*/
 
 $totalSql = "
 
 SELECT
-
 SUM(
 CASE
 
 WHEN ?='CONTADO'
-AND IFNULL(sc.saldo,0)=0
+THEN
+CASE
+WHEN IFNULL(sc.saldo,0)=0
 AND fr.primer_recibo IS NOT NULL
 AND DATEDIFF(
 fr.primer_recibo,
 v.fecha_registro
 )<=7
-THEN d.total
-
-
-WHEN ?='CREDITO'
-AND (
-IFNULL(sc.saldo,0)>0
-OR fr.primer_recibo IS NULL
-OR DATEDIFF(
-fr.primer_recibo,
-v.fecha_registro
-)>7
-)
-THEN d.total
-
-
-WHEN ?='TODOS'
-THEN d.total
-
+THEN tot.total_rdx
 ELSE 0
-
 END
 
-) total_monto
+WHEN ?='CREDITO'
+THEN
+CASE
+WHEN IFNULL(sc.saldo,0)>0
+THEN
+CASE
+WHEN sc.saldo >= tot.total_rdx
+THEN tot.total_rdx
+ELSE ROUND(
+sc.saldo*
+(
+tot.total_rdx/
+NULLIF(tot.total_factura,0)
+),2)
+END
+ELSE 0
+END
 
+WHEN ?='TODOS'
+THEN
+CASE
+WHEN IFNULL(sc.saldo,0)>0
+THEN
+CASE
+WHEN sc.saldo >= tot.total_rdx
+THEN tot.total_rdx
+ELSE ROUND(
+sc.saldo*
+(
+tot.total_rdx/
+NULLIF(tot.total_factura,0)
+),2)
+END
+ELSE tot.total_rdx
+END
+
+ELSE 0
+END
+) total_monto
 
 FROM adm_venta v
 
-JOIN adm_detalle_venta d
-ON d.idventa=v.idventa
-
+JOIN(
+SELECT
+idventa,
+SUM(total) total_factura,
+SUM(
+CASE
+WHEN p.codigormym LIKE '%RDX%'
+THEN d.total
+ELSE 0
+END
+) total_rdx
+FROM adm_detalle_venta d
 JOIN adm_producto p
 ON p.idproducto=d.idproducto
+GROUP BY idventa
+) tot
+ON tot.idventa=v.idventa
 
 LEFT JOIN saldoxcobrar sc
 ON sc.idventa=v.idventa
@@ -335,30 +389,21 @@ GROUP BY fr.idventa
 ) fr
 ON fr.idventa=v.idventa
 
-
 WHERE
-
-v.estado>0
-
+v.estado=1
 AND v.tipo IN('F','E')
-
 AND NOT(
 v.tipo='F'
 AND v.id_envio>0
 )
-
-AND p.codigormym LIKE '%RDX%'
-
+AND tot.total_rdx>0
 AND DATE(v.fecha_registro)
 BETWEEN ?
 AND ?
 
 ";
 
-
-$t = $conn->prepare(
-    $totalSql
-);
+$t = $conn->prepare($totalSql);
 
 $t->bind_param(
     "sssss",
@@ -371,21 +416,13 @@ $t->bind_param(
 
 $t->execute();
 
-$row =
-    $t->get_result()
-    ->fetch_assoc();
-
-$totalPendiente =
-    (float)$row["total_monto"];
+$row = $t->get_result()->fetch_assoc();
+$totalPendiente = (float)$row['total_monto'];
 
 $t->close();
-
 $conn->close();
 
-
-
 echo json_encode([
-
     'data' => $data,
 
     'totalPendiente' => round(
@@ -394,5 +431,4 @@ echo json_encode([
     ),
 
     'totalClientes' => $totalClientes
-
 ]);
