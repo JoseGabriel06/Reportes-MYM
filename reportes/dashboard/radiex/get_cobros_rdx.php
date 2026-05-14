@@ -9,11 +9,10 @@ error_reporting(E_ALL);
 
 mysqli_report(
     MYSQLI_REPORT_ERROR |
-        MYSQLI_REPORT_STRICT
+    MYSQLI_REPORT_STRICT
 );
 
 require_once '../../../includes/db_connect.php';
-
 
 function salir($arr)
 {
@@ -26,15 +25,9 @@ function salir($arr)
 
 try {
 
-    $fechaInicio =
-        $_POST['fechaInicio'] ?? '';
-
-    $fechaFinal =
-        $_POST['fechaFinal'] ?? '';
-
-    $sucursal =
-        (int)($_POST['sucursal'] ?? 1);
-
+    $fechaInicio = $_POST['fechaInicio'] ?? '';
+    $fechaFinal  = $_POST['fechaFinal'] ?? '';
+    $sucursal    = (int)($_POST['sucursal'] ?? 1);
 
     $map = [
         1 => 'central',
@@ -42,179 +35,162 @@ try {
         3 => 'xela'
     ];
 
-    if (!isset($map[$sucursal])) {
+    if (
+        !$fechaInicio ||
+        !$fechaFinal ||
+        !isset($map[$sucursal])
+    ) {
         salir([
+            'data' => [],
             'rows' => [],
             'totalCobrado' => 0
         ]);
     }
 
-
-    $conn =
-        connectToDatabase(
-            $map[$sucursal]
-        );
-
-    $conn->set_charset(
-        'utf8mb4'
-    );
-
+    $conn = connectToDatabase($map[$sucursal]);
+    $conn->set_charset('utf8mb4');
 
     /*
-==========================================
-COBRO RDX REAL
-(ventas parcialmente pagadas ajustadas)
-==========================================
-*/
+    =========================================================
+    COBROS RADIEX POR VENDEDOR
+    REGLA GERENCIAL:
+    - El cliente abona a la factura general.
+    - Para análisis, Radiex se recupera primero.
+    - Recuperado = total factura - saldo actual.
+    - Ventas mostrador = contado automático.
+    =========================================================
+    */
 
     $sql = "
 
 SELECT
 
-base.vendedor,
+    base.vendedor,
 
-SUM(
-base.cobrado_rdx_real
-) total_cobrado,
+    ROUND(
+        SUM(base.cobrado_rdx),
+        2
+    ) total_cobrado,
 
-COUNT(
-DISTINCT base.idrecibo
-) recibos,
+    COUNT(
+        DISTINCT CASE
+            WHEN base.cobrado_rdx > 0
+            THEN base.idventa
+        END
+    ) ventas_cobradas,
 
-COUNT(
-DISTINCT base.idventa
-) ventas_cobradas
+    COUNT(
+        DISTINCT CASE
+            WHEN base.cobrado_rdx > 0
+            THEN base.idventa
+        END
+    ) recibos
 
+FROM (
 
-FROM(
+    SELECT
 
-SELECT DISTINCT
+        v.idventa,
 
-r.idrecibo,
+        COALESCE(
+            e.nombre,
+            'SIN VENDEDOR'
+        ) vendedor,
 
-fr.idventa,
+        tot.total_factura,
+        tot.total_rdx,
 
-COALESCE(
-e.nombre,
-'SIN VENDEDOR'
-) vendedor,
+        IFNULL(
+            sc.saldo,
+            0
+        ) saldo_actual,
 
+        LEAST(
+            tot.total_rdx,
+            GREATEST(
+                tot.total_factura -
+                IFNULL(sc.saldo, 0),
+                0
+            )
+        ) cobrado_rdx
 
-/* COBRO REAL RADIEX */
-CASE
+    FROM adm_venta v
 
-/* si saldo quedó mayor que radiex
-no se ha cobrado nada de rdx */
-WHEN IFNULL(sc.saldo,0)
->= rdx.total_rdx
-THEN 0
+    JOIN (
+        SELECT
+            d.idventa,
+            SUM(d.total) total_factura,
+            SUM(
+                CASE
+                    WHEN p.codigormym LIKE '%RDX%'
+                    THEN d.total
+                    ELSE 0
+                END
+            ) total_rdx
+        FROM adm_detalle_venta d
+        JOIN adm_producto p
+            ON p.idproducto = d.idproducto
+        GROUP BY d.idventa
+    ) tot
+        ON tot.idventa = v.idventa
 
+    LEFT JOIN (
+        SELECT
+            idpedido,
+            MAX(id_empleado) id_empleado
+        FROM pedido_producto
+        GROUP BY idpedido
+    ) pp
+        ON pp.idpedido = v.idpedido
 
-/* si hay saldo parcial
-cobrado = radiex - saldo proporcional */
-WHEN IFNULL(sc.saldo,0)>0
-AND sc.saldo<rdx.total_rdx
+    LEFT JOIN adm_usuario u
+        ON u.idadm_usuario = v.id_usuario
 
-THEN
-rdx.total_rdx
--
-ROUND(
-sc.saldo*
-(
-rdx.total_rdx/
-NULLIF(
-tot.total_venta,
-0
-)
-),2)
+    LEFT JOIN adm_empleado e
+        ON e.id_empleado =
+            CASE
+                WHEN v.idpedido > 0
+                THEN pp.id_empleado
+                ELSE u.id_empleado
+            END
 
+    LEFT JOIN saldoxcobrar sc
+        ON sc.idventa = v.idventa
 
-/* pagado totalmente */
-ELSE rdx.total_rdx
+    WHERE
 
-END cobrado_rdx_real
+        v.estado > 0
 
+        AND v.tipo IN (
+            'F',
+            'E'
+        )
 
-FROM adm_recibo r
+        AND NOT (
+            v.tipo = 'F'
+            AND v.id_envio > 0
+        )
 
-JOIN adm_facturas_recibo fr
-ON fr.idrecibo=r.idrecibo
+        AND tot.total_rdx > 0
 
-JOIN adm_venta v
-ON v.idventa=fr.idventa
+        AND DATE(v.fecha_registro)
+        BETWEEN ?
+        AND ?
 
-LEFT JOIN pedido_producto pp
-ON pp.idpedido=v.idpedido
-
-LEFT JOIN adm_empleado e
-ON e.id_empleado=pp.id_empleado
-
-
-LEFT JOIN saldoxcobrar sc
-ON sc.idventa=v.idventa
-
-
-JOIN(
-SELECT
-idventa,
-SUM(total) total_venta
-FROM adm_detalle_venta
-GROUP BY idventa
-) tot
-ON tot.idventa=v.idventa
-
-
-JOIN(
-SELECT
-d.idventa,
-SUM(d.total) total_rdx
-FROM adm_detalle_venta d
-JOIN adm_producto p
-ON p.idproducto=d.idproducto
-WHERE p.codigormym LIKE '%RDX%'
-GROUP BY d.idventa
-) rdx
-ON rdx.idventa=v.idventa
-
-
-WHERE
-
-r.estado>0
-
-AND v.estado=1
-
-AND v.tipo IN(
-'F',
-'E'
-)
-
-AND NOT(
-v.tipo='F'
-AND v.id_envio>0
-)
-
-AND DATE(
-r.fecha_recibo
-)
-BETWEEN ?
-AND ?
-
-)base
-
+) base
 
 GROUP BY
-base.vendedor
+    base.vendedor
+
+HAVING
+    SUM(base.cobrado_rdx) > 0
 
 ORDER BY
-base.vendedor
+    base.vendedor
 
 ";
 
-
-    $stmt =
-        $conn->prepare(
-            $sql
-        );
+    $stmt = $conn->prepare($sql);
 
     $stmt->bind_param(
         "ss",
@@ -224,18 +200,12 @@ base.vendedor
 
     $stmt->execute();
 
-    $res =
-        $stmt->get_result();
-
+    $res = $stmt->get_result();
 
     $data = [];
-
     $totalCobrado = 0;
 
-
-    while (
-        $r = $res->fetch_assoc()
-    ) {
+    while ($r = $res->fetch_assoc()) {
 
         $r["total_cobrado"] =
             (float)$r["total_cobrado"];
@@ -252,23 +222,18 @@ base.vendedor
             $r["total_cobrado"];
     }
 
-
     $stmt->close();
-
     $conn->close();
 
-
     salir([
-
         "data" => $data,
         "rows" => $data,
-
         "totalCobrado" => round(
             $totalCobrado,
             2
         )
-
     ]);
+
 } catch (Throwable $e) {
 
     salir([

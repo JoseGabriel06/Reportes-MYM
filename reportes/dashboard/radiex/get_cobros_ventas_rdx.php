@@ -41,127 +41,144 @@ if (!isset($map[$sucursal])) {
 $conn = connectToDatabase($map[$sucursal]);
 $conn->set_charset("utf8mb4");
 
+/*
+=========================================================
+VENTAS RADIEX POR VENDEDOR
+Reglas:
+- Si venta viene de pedido -> vendedor desde pedido_producto
+- Si venta es mostrador (idpedido=0) -> vendedor desde adm_usuario
+- Todo abono cubre primero Radiex
+- Recuperación parcial se divide contado/crédito
+=========================================================
+*/
+
 $sql = "
 
 SELECT
 
-base.vendedor,
+    base.vendedor,
 
-SUM(
-CASE
-WHEN base.es_contado = 1
-THEN base.total_venta
-ELSE 0
-END
-) total_contado,
+    ROUND(
+        SUM(base.total_contado),
+        2
+    ) total_contado,
 
-SUM(
-CASE
-WHEN base.es_credito = 1
-THEN base.total_venta
-ELSE 0
-END
-) total_credito,
+    ROUND(
+        SUM(base.total_credito),
+        2
+    ) total_credito,
 
-SUM(base.total_venta) total_general
+    ROUND(
+        SUM(base.total_rdx),
+        2
+    ) total_general
 
 FROM
 (
 
-SELECT
+    SELECT
 
-v.idventa,
+        v.idventa,
 
-COALESCE(
-MAX(e.nombre),
-'SIN VENDEDOR'
-) vendedor,
+        COALESCE(
+            MAX(e.nombre),
+            'SIN VENDEDOR'
+        ) vendedor,
 
-SUM(d.total) total_venta,
+        SUM(d.total) total_rdx,
 
-CASE
-WHEN
-IFNULL(sc.saldo,0)=0
-AND fr.primer_recibo IS NOT NULL
-AND DATEDIFF(
-fr.primer_recibo,
-v.fecha_registro
-)<=7
-THEN 1
-ELSE 0
-END es_contado,
+        tot.total_factura,
 
-CASE
-WHEN
-IFNULL(sc.saldo,0)>0
-OR fr.primer_recibo IS NULL
-OR DATEDIFF(
-fr.primer_recibo,
-v.fecha_registro
-)>7
-THEN 1
-ELSE 0
-END es_credito
+        IFNULL(sc.saldo, 0) saldo_actual,
 
-FROM adm_venta v
+        /*
+        RECUPERADO RADIEX
+        */
+        LEAST(
+            SUM(d.total),
+            GREATEST(
+                tot.total_factura - IFNULL(sc.saldo, 0),
+                0
+            )
+        ) total_contado,
 
-JOIN adm_detalle_venta d
-ON d.idventa = v.idventa
+        /*
+        PENDIENTE RADIEX
+        */
+        SUM(d.total)
+        -
+        LEAST(
+            SUM(d.total),
+            GREATEST(
+                tot.total_factura - IFNULL(sc.saldo, 0),
+                0
+            )
+        ) total_credito
 
-JOIN adm_producto p
-ON p.idproducto = d.idproducto
+    FROM adm_venta v
 
-LEFT JOIN pedido_producto pp
-ON pp.idpedido = v.idpedido
+    JOIN adm_detalle_venta d
+        ON d.idventa = v.idventa
 
-LEFT JOIN adm_empleado e
-ON e.id_empleado = pp.id_empleado
+    JOIN adm_producto p
+        ON p.idproducto = d.idproducto
 
-LEFT JOIN saldoxcobrar sc
-ON sc.idventa = v.idventa
+    LEFT JOIN pedido_producto pp
+        ON pp.idpedido = v.idpedido
 
-LEFT JOIN
-(
-SELECT
-fr.idventa,
-MIN(r.fecha_recibo) primer_recibo
-FROM adm_facturas_recibo fr
-JOIN adm_recibo r
-ON r.idrecibo = fr.idrecibo
-GROUP BY fr.idventa
-) fr
-ON fr.idventa = v.idventa
+    LEFT JOIN adm_usuario u
+        ON u.idadm_usuario = v.id_usuario
 
-WHERE
+    LEFT JOIN adm_empleado e
+        ON e.id_empleado =
+            CASE
+                WHEN v.idpedido > 0
+                THEN pp.id_empleado
+                ELSE u.id_empleado
+            END
 
-v.estado > 0
+    LEFT JOIN saldoxcobrar sc
+        ON sc.idventa = v.idventa
 
-AND v.tipo IN('F','E')
+    JOIN
+    (
+        SELECT
+            idventa,
+            SUM(total) total_factura
+        FROM adm_detalle_venta
+        GROUP BY idventa
+    ) tot
+        ON tot.idventa = v.idventa
 
-AND NOT(
-v.tipo = 'F'
-AND v.id_envio > 0
-)
+    WHERE
 
-AND p.codigormym LIKE '%RDX%'
+        v.estado > 0
 
-AND DATE(v.fecha_registro)
-BETWEEN ?
-AND ?
+        AND v.tipo IN ('F','E')
 
-GROUP BY
-v.idventa,
-v.fecha_registro,
-sc.saldo,
-fr.primer_recibo
+        AND NOT (
+            v.tipo = 'F'
+            AND v.id_envio > 0
+        )
+
+        AND p.codigormym LIKE '%RDX%'
+
+        AND DATE(v.fecha_registro)
+        BETWEEN ?
+        AND ?
+
+    GROUP BY
+        v.idventa,
+        tot.total_factura,
+        sc.saldo
 
 ) base
 
 GROUP BY
-base.vendedor
+    base.vendedor
 
 ORDER BY
-base.vendedor
+    base.vendedor
 
 ";
 

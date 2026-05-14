@@ -18,7 +18,7 @@
                     c.primer_nombre as cliente,
                     v.seriefactura,v.nofactura,
                     s.monto,s.abono,s.saldo,
-                    v.fecha_registro as fecha_envio,
+                    date(v.fecha_registro) as fecha_envio,
                     s.fecha_vencimiento,
                     if (datediff(now(), s.fecha_vencimiento) < 0,0,datediff(now(), s.fecha_vencimiento)) as dias_vencidos
                     from adm_venta v

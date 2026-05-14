@@ -29,6 +29,16 @@ $map = [
     3 => 'xela'
 ];
 
+if (!isset($map[$sucursal])) {
+    echo json_encode([
+        'data' => [],
+        'totalPendiente' => 0,
+        'totalClientes' => 0,
+        'error' => 'Sucursal inválida'
+    ]);
+    exit;
+}
+
 $conn = connectToDatabase($map[$sucursal]);
 $conn->set_charset("utf8mb4");
 
@@ -43,14 +53,16 @@ $schemaClientes = $clientesDb[$sucursal];
 $filtro = '';
 
 if ($iddepto != '') {
+    $iddepto = (int)$iddepto;
     $filtro .= "
-AND c.iddepartamento=$iddepto
+AND c.iddepartamento = $iddepto
 ";
 }
 
 if ($idmuni != '') {
+    $idmuni = (int)$idmuni;
     $filtro .= "
-AND c.id_municipio=$idmuni
+AND c.id_municipio = $idmuni
 ";
 }
 
@@ -58,22 +70,24 @@ $having = '';
 
 if ($tipoPago == 'CONTADO') {
     $having = "
-HAVING SUM(t.saldo_rdx)=0
+HAVING SUM(t.saldo_rdx) = 0
 ";
 }
 
 if ($tipoPago == 'CREDITO') {
     $having = "
-HAVING SUM(t.saldo_rdx)>0
+HAVING SUM(t.saldo_rdx) > 0
 ";
 }
 
 /*
 =============================================
-DETALLE CORREGIDO
-- excluye saldos cancelados
-- saldo RDX proporcional
-- si saldo general cubre RDX completo toma RDX
+AUXILIAR DE CARTERA RADIEX
+Regla analítica:
+- El cliente abona a la factura general.
+- Para análisis gerencial, los abonos se aplican primero a Radiex.
+- Si lo abonado cubre el total Radiex, saldo Radiex = 0.
+- Si Radiex queda saldado, días vencidos = 0.
 =============================================
 */
 
@@ -81,191 +95,234 @@ $sql = "
 
 SELECT
 
-MIN(t.fecha) fecha,
+    MIN(t.fecha) fecha,
 
-COUNT(
-DISTINCT t.idventa
-) documento,
+    COUNT(
+        DISTINCT t.idventa
+    ) documento,
 
-t.cliente,
-t.departamento,
-t.municipio,
+    t.cliente,
+    t.departamento,
+    t.municipio,
 
-CASE
-WHEN SUM(t.saldo_rdx)>0
-THEN 'CREDITO'
-ELSE 'CONTADO'
-END tipo_pago,
+    CASE
+        WHEN SUM(t.saldo_rdx) > 0
+        THEN 'CREDITO'
+        ELSE 'CONTADO'
+    END tipo_pago,
 
-CASE
-WHEN SUM(t.saldo_rdx)>0
-THEN SUM(t.saldo_rdx)
-ELSE SUM(t.contado_monto)
-END pendiente,
+    CASE
+        WHEN SUM(t.saldo_rdx) > 0
+        THEN SUM(t.saldo_rdx)
+        ELSE SUM(t.contado_monto)
+    END pendiente,
 
-MAX(
-t.dias_vencidos
-) dias_vencidos,
+    MAX(t.dias_vencidos) dias_vencidos,
 
-t.vendedor
+    t.vendedor
 
-FROM(
+FROM (
 
-SELECT
+    SELECT
 
-v.idventa,
-DATE(v.fecha_registro) fecha,
+        v.idventa,
+        DATE(v.fecha_registro) fecha,
 
-c.primer_nombre cliente,
+        c.primer_nombre cliente,
 
-dep.nombre departamento,
-mun.nombre municipio,
+        dep.nombre departamento,
+        mun.nombre municipio,
 
-e.nombre vendedor,
+        COALESCE(
+            e.nombre,
+            'SIN VENDEDOR'
+        ) vendedor,
 
-/*
-SALDO RADIEX CORREGIDO
-*/
-CASE
+        /*
+        =============================================
+        SALDO RADIEX ESTRATÉGICO
+        =============================================
+        */
+        CASE
 
-WHEN IFNULL(sc.saldo,0)=0
-THEN 0
+            WHEN IFNULL(sc.saldo, 0) = 0
+            THEN 0
 
-WHEN sc.saldo >= tot.total_rdx
-THEN tot.total_rdx
+            WHEN (
+                tot.total_factura - IFNULL(sc.saldo, 0)
+            ) >= tot.total_rdx
+            THEN 0
 
-ELSE ROUND(
-sc.saldo *
-(
-tot.total_rdx/
-NULLIF(tot.total_factura,0)
-),2)
+            ELSE ROUND(
+                tot.total_rdx -
+                (
+                    tot.total_factura - IFNULL(sc.saldo, 0)
+                ),
+                2
+            )
 
-END saldo_rdx,
+        END saldo_rdx,
 
+        /*
+        RECUPERADO COMO CONTADO
+        */
+        CASE
 
-CASE
-WHEN
-IFNULL(sc.saldo,0)=0
-AND fr.primer_recibo IS NOT NULL
-AND DATEDIFF(
-fr.primer_recibo,
-v.fecha_registro
-)<=7
-THEN tot.total_rdx
-ELSE 0
-END contado_monto,
+            WHEN IFNULL(sc.saldo, 0) = 0
+            THEN tot.total_rdx
 
+            WHEN (
+                tot.total_factura - IFNULL(sc.saldo, 0)
+            ) >= tot.total_rdx
+            THEN tot.total_rdx
 
-CASE
-WHEN IFNULL(sc.saldo,0)>0
-THEN DATEDIFF(
-CURDATE(),
-v.fecha_registro
-)
-ELSE 0
-END dias_vencidos
+            ELSE 0
 
+        END contado_monto,
 
-FROM adm_venta v
+        /*
+        DÍAS VENCIDOS
+        */
+        CASE
 
-/* factura total */
-JOIN(
-SELECT
-idventa,
-SUM(total) total_factura,
-SUM(
-CASE
-WHEN p.codigormym LIKE '%RDX%'
-THEN d.total
-ELSE 0
-END
-) total_rdx
-FROM adm_detalle_venta d
-JOIN adm_producto p
-ON p.idproducto=d.idproducto
-GROUP BY idventa
-) tot
-ON tot.idventa=v.idventa
+            WHEN
+                CASE
 
-JOIN {$schemaClientes}.clientes c
-ON c.idcliente=v.id_cliente
+                    WHEN IFNULL(sc.saldo, 0) = 0
+                    THEN 0
 
-LEFT JOIN {$schemaClientes}.adm_departamentopais dep
-ON dep.iddepartamento=c.iddepartamento
+                    WHEN (
+                        tot.total_factura - IFNULL(sc.saldo, 0)
+                    ) >= tot.total_rdx
+                    THEN 0
 
-LEFT JOIN {$schemaClientes}.adm_municipio mun
-ON mun.id_municipio=c.id_municipio
+                    ELSE ROUND(
+                        tot.total_rdx -
+                        (
+                            tot.total_factura - IFNULL(sc.saldo, 0)
+                        ),
+                        2
+                    )
 
-JOIN pedido_producto pp
-ON pp.idpedido=v.idpedido
+                END > 0
 
-JOIN adm_empleado e
-ON e.id_empleado=pp.id_empleado
+            THEN DATEDIFF(
+                CURDATE(),
+                v.fecha_registro
+            )
 
-LEFT JOIN saldoxcobrar sc
-ON sc.idventa=v.idventa
+            ELSE 0
 
-LEFT JOIN(
-SELECT
-fr.idventa,
-MIN(r.fecha_recibo) primer_recibo
-FROM adm_facturas_recibo fr
-JOIN adm_recibo r
-ON r.idrecibo=fr.idrecibo
-GROUP BY fr.idventa
-) fr
-ON fr.idventa=v.idventa
+        END dias_vencidos
 
-WHERE
+    FROM adm_venta v
 
-v.estado=1
+    /*
+    TOTAL FACTURA + TOTAL RADIEX
+    */
+    JOIN (
+        SELECT
+            d.idventa,
+            SUM(d.total) total_factura,
+            SUM(
+                CASE
+                    WHEN p.codigormym LIKE '%RDX%'
+                    THEN d.total
+                    ELSE 0
+                END
+            ) total_rdx
+        FROM adm_detalle_venta d
+        JOIN adm_producto p
+            ON p.idproducto = d.idproducto
+        GROUP BY d.idventa
+    ) tot
+        ON tot.idventa = v.idventa
 
-AND v.tipo IN('F','E')
+    JOIN {$schemaClientes}.clientes c
+        ON c.idcliente = v.id_cliente
 
-AND NOT(
-v.tipo='F'
-AND v.id_envio>0
-)
+    LEFT JOIN {$schemaClientes}.adm_departamentopais dep
+        ON dep.iddepartamento = c.iddepartamento
 
-/* solo ventas que sí tienen radiex */
-AND tot.total_rdx>0
+    LEFT JOIN {$schemaClientes}.adm_municipio mun
+        ON mun.id_municipio = c.id_municipio
 
-AND DATE(v.fecha_registro)
-BETWEEN ?
-AND ?
+    /*
+    VENDEDOR DESDE PEDIDO O MOSTRADOR
+    */
+    LEFT JOIN (
+        SELECT
+            idpedido,
+            MAX(id_empleado) id_empleado
+        FROM pedido_producto
+        GROUP BY idpedido
+    ) pp
+        ON pp.idpedido = v.idpedido
 
-$filtro
+    LEFT JOIN adm_usuario u
+        ON u.idadm_usuario = v.id_usuario
+
+    LEFT JOIN adm_empleado e
+        ON e.id_empleado =
+            CASE
+                WHEN v.idpedido > 0
+                THEN pp.id_empleado
+                ELSE u.id_empleado
+            END
+
+    /*
+    CUENTAS POR COBRAR
+    */
+    LEFT JOIN saldoxcobrar sc
+        ON sc.idventa = v.idventa
+
+    WHERE
+
+        v.estado = 1
+
+        AND v.tipo IN ('F','E')
+
+        AND NOT (
+            v.tipo = 'F'
+            AND v.id_envio > 0
+        )
+
+        AND tot.total_rdx > 0
+
+        AND DATE(v.fecha_registro)
+        BETWEEN ?
+        AND ?
+
+        $filtro
+
+    GROUP BY
+        v.idventa,
+        v.fecha_registro,
+        c.primer_nombre,
+        dep.nombre,
+        mun.nombre,
+        e.nombre,
+        sc.saldo,
+        tot.total_factura,
+        tot.total_rdx
+
+) t
 
 GROUP BY
-v.idventa,
-v.fecha_registro,
-c.primer_nombre,
-dep.nombre,
-mun.nombre,
-e.nombre,
-sc.saldo,
-fr.primer_recibo,
-tot.total_factura,
-tot.total_rdx
 
-)t
-
-GROUP BY
-
-t.cliente,
-t.departamento,
-t.municipio,
-t.vendedor
+    t.cliente,
+    t.departamento,
+    t.municipio,
+    t.vendedor
 
 $having
 
 ORDER BY
 
-t.departamento,
-t.municipio,
-tipo_pago,
-dias_vencidos DESC
+    t.departamento,
+    t.municipio,
+    tipo_pago,
+    dias_vencidos DESC
 
 ";
 
@@ -292,114 +349,124 @@ $stmt->close();
 
 /*
 =============================================
-KPI OFICIAL CORREGIDO
+KPI TOTAL CARTERA RADIEX
+Misma regla analítica que el detalle.
 =============================================
 */
 
 $totalSql = "
 
 SELECT
-SUM(
-CASE
 
-WHEN ?='CONTADO'
-THEN
-CASE
-WHEN IFNULL(sc.saldo,0)=0
-AND fr.primer_recibo IS NOT NULL
-AND DATEDIFF(
-fr.primer_recibo,
-v.fecha_registro
-)<=7
-THEN tot.total_rdx
-ELSE 0
-END
+IFNULL(
+    SUM(
+        CASE
 
-WHEN ?='CREDITO'
-THEN
-CASE
-WHEN IFNULL(sc.saldo,0)>0
-THEN
-CASE
-WHEN sc.saldo >= tot.total_rdx
-THEN tot.total_rdx
-ELSE ROUND(
-sc.saldo*
-(
-tot.total_rdx/
-NULLIF(tot.total_factura,0)
-),2)
-END
-ELSE 0
-END
+            WHEN ? = 'CONTADO'
+            THEN
+                CASE
 
-WHEN ?='TODOS'
-THEN
-CASE
-WHEN IFNULL(sc.saldo,0)>0
-THEN
-CASE
-WHEN sc.saldo >= tot.total_rdx
-THEN tot.total_rdx
-ELSE ROUND(
-sc.saldo*
-(
-tot.total_rdx/
-NULLIF(tot.total_factura,0)
-),2)
-END
-ELSE tot.total_rdx
-END
+                    WHEN IFNULL(sc.saldo, 0) = 0
+                    THEN tot.total_rdx
 
-ELSE 0
-END
+                    WHEN (tot.total_factura - IFNULL(sc.saldo, 0)) >= tot.total_rdx
+                    THEN tot.total_rdx
+
+                    ELSE 0
+
+                END
+
+            WHEN ? = 'CREDITO'
+            THEN
+                CASE
+
+                    WHEN IFNULL(sc.saldo, 0) = 0
+                    THEN 0
+
+                    WHEN (tot.total_factura - IFNULL(sc.saldo, 0)) >= tot.total_rdx
+                    THEN 0
+
+                    ELSE ROUND(
+                        tot.total_rdx -
+                        (
+                            tot.total_factura - IFNULL(sc.saldo, 0)
+                        ),
+                        2
+                    )
+
+                END
+
+            WHEN ? = 'TODOS'
+            THEN
+                CASE
+
+                    WHEN IFNULL(sc.saldo, 0) = 0
+                    THEN tot.total_rdx
+
+                    WHEN (tot.total_factura - IFNULL(sc.saldo, 0)) >= tot.total_rdx
+                    THEN tot.total_rdx
+
+                    ELSE ROUND(
+                        tot.total_rdx -
+                        (
+                            tot.total_factura - IFNULL(sc.saldo, 0)
+                        ),
+                        2
+                    )
+
+                END
+
+            ELSE 0
+
+        END
+    ),
+    0
 ) total_monto
 
 FROM adm_venta v
 
-JOIN(
-SELECT
-idventa,
-SUM(total) total_factura,
-SUM(
-CASE
-WHEN p.codigormym LIKE '%RDX%'
-THEN d.total
-ELSE 0
-END
-) total_rdx
-FROM adm_detalle_venta d
-JOIN adm_producto p
-ON p.idproducto=d.idproducto
-GROUP BY idventa
+JOIN (
+    SELECT
+        d.idventa,
+        SUM(d.total) total_factura,
+        SUM(
+            CASE
+                WHEN p.codigormym LIKE '%RDX%'
+                THEN d.total
+                ELSE 0
+            END
+        ) total_rdx
+    FROM adm_detalle_venta d
+    JOIN adm_producto p
+        ON p.idproducto = d.idproducto
+    GROUP BY d.idventa
 ) tot
-ON tot.idventa=v.idventa
+    ON tot.idventa = v.idventa
 
 LEFT JOIN saldoxcobrar sc
-ON sc.idventa=v.idventa
+    ON sc.idventa = v.idventa
 
-LEFT JOIN(
-SELECT
-fr.idventa,
-MIN(r.fecha_recibo) primer_recibo
-FROM adm_facturas_recibo fr
-JOIN adm_recibo r
-ON r.idrecibo=fr.idrecibo
-GROUP BY fr.idventa
-) fr
-ON fr.idventa=v.idventa
+JOIN {$schemaClientes}.clientes c
+    ON c.idcliente = v.id_cliente
 
 WHERE
-v.estado=1
+
+v.estado = 1
+
 AND v.tipo IN('F','E')
-AND NOT(
-v.tipo='F'
-AND v.id_envio>0
+
+AND NOT (
+    v.tipo = 'F'
+    AND v.id_envio > 0
 )
-AND tot.total_rdx>0
+
+AND tot.total_rdx > 0
+
 AND DATE(v.fecha_registro)
 BETWEEN ?
 AND ?
+
+$filtro
 
 ";
 

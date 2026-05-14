@@ -8,7 +8,7 @@ $hoy = date('Y-m-d');
 <html>
 
 <head>
-    <title>Resumen Cobros y Ventas Radiex</title>
+    <title>Resumen Ventas Radiex</title>
 
     <link rel="stylesheet"
         href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
@@ -133,7 +133,7 @@ $hoy = date('Y-m-d');
 
         <div style="display:flex;justify-content:space-between;align-items:center;">
             <div class="titulo">
-                Resumen Cobros y Ventas Radiex
+                Resumen Ventas Radiex
             </div>
 
             <a href="../../../index.php">

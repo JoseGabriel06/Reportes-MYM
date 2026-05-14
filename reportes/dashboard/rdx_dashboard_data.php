@@ -23,13 +23,18 @@ $map = [
 ];
 
 /* ============================================================
-   FUNCIÓN QUE GENERA RESUMEN
+   FUNCIÓN QUE GENERA RESUMEN RADIEX
+   Regla gerencial:
+   - El abono del cliente se aplica primero a Radiex.
+   - Si lo abonado cubre Radiex, se considera contado/recuperado.
+   - Si no lo cubre completo, solo queda crédito la diferencia.
 ============================================================ */
 function generarResumen($conn, $fechaInicio, $fechaFinal)
 {
     $delete = $conn->prepare("
         DELETE FROM resumen_rdx_dashboard
-        WHERE fecha_desde=? AND fecha_hasta=?
+        WHERE fecha_desde = ?
+        AND fecha_hasta = ?
     ");
     $delete->bind_param("ss", $fechaInicio, $fechaFinal);
     $delete->execute();
@@ -38,107 +43,123 @@ function generarResumen($conn, $fechaInicio, $fechaFinal)
     $sql = "
 
 SELECT
-p.idproducto,
-p.codigormym,
-p.nombre,
-IFNULL(pp.costo,0) costo,
+    p.idproducto,
+    p.codigormym,
+    p.nombre,
+    IFNULL(pp.costo, 0) costo,
 
-SUM(t.cantidad_rdx) cantidad,
-SUM(t.total_rdx) total_general,
-
-SUM(
-CASE
-WHEN t.es_credito=0
-THEN t.total_rdx
-ELSE 0
-END
-) total_contado,
-
-SUM(
-CASE
-WHEN t.es_credito=1
-THEN t.total_rdx
-ELSE 0
-END
-) total_credito
+    SUM(t.cantidad_rdx) cantidad,
+    SUM(t.total_rdx) total_general,
+    SUM(t.total_contado) total_contado,
+    SUM(t.total_credito) total_credito
 
 FROM (
 
-SELECT
+    SELECT
 
-v.idventa,
-d.idproducto,
+        v.idventa,
+        d.idproducto,
 
-SUM(d.cantidad) cantidad_rdx,
-SUM(d.total) total_rdx,
+        SUM(d.cantidad) cantidad_rdx,
+        SUM(d.total) total_rdx,
 
-CASE
-WHEN sc.saldo>0
-OR r.fecha_recibo IS NULL
-OR DATEDIFF(
-r.fecha_recibo,
-v.fecha_registro
-)>7
-THEN 1
-ELSE 0
-END es_credito
+        ROUND(
+            SUM(d.total) *
+            (
+                LEAST(
+                    tot.total_rdx,
+                    GREATEST(
+                        tot.total_factura - IFNULL(sc.saldo, 0),
+                        0
+                    )
+                ) / NULLIF(tot.total_rdx, 0)
+            ),
+            2
+        ) total_contado,
 
-FROM adm_venta v
+        ROUND(
+            SUM(d.total) -
+            (
+                SUM(d.total) *
+                (
+                    LEAST(
+                        tot.total_rdx,
+                        GREATEST(
+                            tot.total_factura - IFNULL(sc.saldo, 0),
+                            0
+                        )
+                    ) / NULLIF(tot.total_rdx, 0)
+                )
+            ),
+            2
+        ) total_credito
 
-JOIN adm_detalle_venta d
-ON d.idventa=v.idventa
+    FROM adm_venta v
+
+    JOIN adm_detalle_venta d
+        ON d.idventa = v.idventa
+
+    JOIN adm_producto p
+        ON p.idproducto = d.idproducto
+
+    JOIN (
+        SELECT
+            d2.idventa,
+            SUM(d2.total) total_factura,
+            SUM(
+                CASE
+                    WHEN p2.codigormym LIKE '%RDX%'
+                    THEN d2.total
+                    ELSE 0
+                END
+            ) total_rdx
+        FROM adm_detalle_venta d2
+        JOIN adm_producto p2
+            ON p2.idproducto = d2.idproducto
+        GROUP BY d2.idventa
+    ) tot
+        ON tot.idventa = v.idventa
+
+    LEFT JOIN saldoxcobrar sc
+        ON sc.idventa = v.idventa
+
+    WHERE
+        v.estado > 0
+        AND v.tipo IN('F','E')
+        AND NOT (
+            v.tipo = 'F'
+            AND v.id_envio > 0
+        )
+        AND p.codigormym LIKE '%RDX%'
+        AND tot.total_rdx > 0
+        AND DATE(v.fecha_registro) BETWEEN ? AND ?
+
+    GROUP BY
+        v.idventa,
+        d.idproducto,
+        tot.total_factura,
+        tot.total_rdx,
+        sc.saldo
+
+) t
 
 JOIN adm_producto p
-ON p.idproducto=d.idproducto
-
-LEFT JOIN saldoxcobrar sc
-ON sc.idventa=v.idventa
+    ON p.idproducto = t.idproducto
 
 LEFT JOIN (
-SELECT
-fr.idventa,
-MIN(r.fecha_recibo) fecha_recibo
-FROM adm_facturas_recibo fr
-JOIN adm_recibo r
-ON r.idrecibo=fr.idrecibo
-GROUP BY fr.idventa
-) r
-ON r.idventa=v.idventa
-
-WHERE
-v.estado > 0
-AND v.tipo IN('F','E')
-AND NOT(
-v.tipo='F'
-AND v.id_envio>0
-)
-AND p.codigormym LIKE '%RDX%'
-AND DATE(v.fecha_registro)
-BETWEEN ? AND ?
-
-GROUP BY
-v.idventa,
-d.idproducto
-
-)t
-
-JOIN adm_producto p
-ON p.idproducto=t.idproducto
-
-LEFT JOIN (
-SELECT
-idproducto,
-MAX(costo) costo
-FROM precio_producto
-GROUP BY idproducto
+    SELECT
+        idproducto,
+        MAX(costo) costo
+    FROM precio_producto
+    GROUP BY idproducto
 ) pp
-ON pp.idproducto=p.idproducto
+    ON pp.idproducto = p.idproducto
 
 GROUP BY
-p.idproducto,
-p.codigormym,
-p.nombre,
-pp.costo
+    p.idproducto,
+    p.codigormym,
+    p.nombre,
+    pp.costo
 
 ";
 
@@ -150,9 +171,20 @@ pp.costo
     while ($r = $res->fetch_assoc()) {
 
         $insert = $conn->prepare("
-        INSERT INTO resumen_rdx_dashboard
-        (fecha_desde,fecha_hasta,idproducto,codigormym,nombre,costo,cantidad,total_general,total_contado,total_credito)
-        VALUES (?,?,?,?,?,?,?,?,?,?)
+            INSERT INTO resumen_rdx_dashboard
+            (
+                fecha_desde,
+                fecha_hasta,
+                idproducto,
+                codigormym,
+                nombre,
+                costo,
+                cantidad,
+                total_general,
+                total_contado,
+                total_credito
+            )
+            VALUES (?,?,?,?,?,?,?,?,?,?)
         ");
 
         $insert->bind_param(
@@ -183,11 +215,12 @@ function obtenerTotales($conn, $fechaInicio, $fechaFinal)
 {
     $stmt = $conn->prepare("
         SELECT 
-            SUM(total_general) total,
-            SUM(total_contado) contado,
-            SUM(total_credito) credito
+            IFNULL(SUM(total_general), 0) total,
+            IFNULL(SUM(total_contado), 0) contado,
+            IFNULL(SUM(total_credito), 0) credito
         FROM resumen_rdx_dashboard
-        WHERE fecha_desde=? AND fecha_hasta=?
+        WHERE fecha_desde = ?
+        AND fecha_hasta = ?
     ");
 
     $stmt->bind_param("ss", $fechaInicio, $fechaFinal);
@@ -211,9 +244,10 @@ function obtenerMesAnterior($conn, $fechaInicio, $fechaFinal)
     $finAnterior    = date("Y-m-d", strtotime("-1 month", strtotime($fechaFinal)));
 
     $stmt = $conn->prepare("
-        SELECT SUM(total_general) total
+        SELECT IFNULL(SUM(total_general), 0) total
         FROM resumen_rdx_dashboard
-        WHERE fecha_desde=? AND fecha_hasta=?
+        WHERE fecha_desde = ?
+        AND fecha_hasta = ?
     ");
 
     $stmt->bind_param("ss", $inicioAnterior, $finAnterior);
@@ -314,12 +348,12 @@ if ($sucursalId === 0) {
         'ok' => true,
         'modo' => 'consolidado',
         'totales' => $totales,
-        'total_empresa' => $totalEmpresa,
-        'contado' => $totalContado,
-        'credito' => $totalCredito,
+        'total_empresa' => round($totalEmpresa, 2),
+        'contado' => round($totalContado, 2),
+        'credito' => round($totalCredito, 2),
         'porcentaje_contado' => round($porcentajeContado, 2),
         'porcentaje_credito' => round($porcentajeCredito, 2),
-        'mes_anterior' => $totalMesAnteriorEmpresa,
+        'mes_anterior' => round($totalMesAnteriorEmpresa, 2),
         'variacion_porcentual' => round($variacion, 2),
         'proyeccion_mensual' => round($proy['proyeccion'], 2),
         'es_proyeccion_activa' => $proy['activa']
@@ -330,7 +364,6 @@ if ($sucursalId === 0) {
 /* ============================================================
    INDIVIDUAL
 ============================================================ */
-
 if (!isset($map[$sucursalId])) {
     echo json_encode(['ok' => false, 'error' => 'Sucursal inválida']);
     exit;
@@ -345,9 +378,10 @@ $datos = obtenerTotales($conn, $fechaInicio, $fechaFinal);
 $totalMesAnterior = obtenerMesAnterior($conn, $fechaInicio, $fechaFinal);
 
 $stmt = $conn->prepare("
-SELECT *
-FROM resumen_rdx_dashboard
-WHERE fecha_desde=? AND fecha_hasta=?
+    SELECT *
+    FROM resumen_rdx_dashboard
+    WHERE fecha_desde = ?
+    AND fecha_hasta = ?
 ");
 
 $stmt->bind_param("ss", $fechaInicio, $fechaFinal);
@@ -378,12 +412,12 @@ echo json_encode([
     'ok' => true,
     'modo' => 'individual',
     'productos' => $data,
-    'total' => $total,
-    'contado' => $totalContado,
-    'credito' => $totalCredito,
+    'total' => round($total, 2),
+    'contado' => round($totalContado, 2),
+    'credito' => round($totalCredito, 2),
     'porcentaje_contado' => round($porcentajeContado, 2),
     'porcentaje_credito' => round($porcentajeCredito, 2),
-    'mes_anterior' => $totalMesAnterior,
+    'mes_anterior' => round($totalMesAnterior, 2),
     'variacion_porcentual' => round($variacion, 2),
     'proyeccion_mensual' => round($proy['proyeccion'], 2),
     'es_proyeccion_activa' => $proy['activa']
