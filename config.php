@@ -1,11 +1,11 @@
 <?php
 
 return (object) array(
-    'host' => '138.118.104.205',
-    'username' => 'usr_mym',
-    'pass' => 'Mym*20#*81@_)',
+    'host' => '32.196.53.116',
+    'username' => 'erp_app',
+    'pass' => 'AppERPmym2681??#',
     'database' => 'db_mymsa',
-    'port' => '3307',
+    'port' => '3306',
     'app_info' => array(
         'appName'=>"DISTRIBUIDORAMYM",
         'appURL'=> "http://yourURL/#/"
